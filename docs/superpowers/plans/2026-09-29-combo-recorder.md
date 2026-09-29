@@ -923,7 +923,6 @@ Expected: the repo URL is printed and `git log origin/main` matches the local lo
 2. Run `ls -la ".../resources/app/file_outputs/"`. The file appears after the first boost.
 3. After a real combo, run `python3 tools/combo_report.py`. Its earned total must match the change in cookies produced shown in the save (`cc_watch.py --once`).
 4. Confirm that the Steam achievements still unlock: the mod's info shows that achievements are allowed.
-````
 
 - [ ] **Step 6: Final verification**
 
