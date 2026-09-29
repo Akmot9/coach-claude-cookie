@@ -53,7 +53,7 @@ test('install writes the live file every tick even without a combo', () => {
     shimmerTypes: { golden: { popFunc() {} } },
     Objects: { 'Wizard tower': {} },
     ObjectsById: [{ name: 'Cursor', amount: 3 }],
-    UpgradesById: [{ name: 'A', bought: 1 }, { name: 'B', bought: 0 }],
+    UpgradesById: { 0: { name: 'A', bought: 1 }, 1: { name: 'B', bought: 0 } }, // an object in the real game, not an array
   };
   const writes = [];
   const rec = install(G, (n, c) => writes.push([n, c]), new ComboTracker(), new LiveFeed());

@@ -164,6 +164,7 @@
   var MOD_ID = 'coach claude cookie';
   var OUTPUT_NAME = 'coachclaudecookie';
   var LIVE_NAME = 'coachclaudelive';
+  var ERROR_NAME = 'coachclaudeerror';
 
   function install(game, send, tracker, live) {
     var disabled = false;
@@ -171,7 +172,11 @@
 
     function safe(fn) {
       if (disabled) return;
-      try { fn(); } catch (e) { disabled = true; console.error('[' + MOD_ID + ']', e); }
+      try { fn(); } catch (e) {
+        disabled = true;
+        console.error('[' + MOD_ID + ']', e);
+        try { send(ERROR_NAME, new Date().toISOString() + ' ' + String(e && e.stack || e)); } catch (e2) { /* nothing left to do */ }
+      }
     }
     function now() { return Date.now() / 1000; }
     function emit(evt) {
@@ -251,8 +256,10 @@
 
     function liveSnapshot(base) {
       var buildings = {}, upgrades = [];
-      (game.ObjectsById || []).forEach(function (o) { buildings[o.name] = o.amount; });
-      (game.UpgradesById || []).forEach(function (u) { if (u.bought) upgrades.push(u.name); });
+      // Game.ObjectsById is an array but Game.UpgradesById is an object: iterate keys for both
+      var objs = game.ObjectsById || {}, upgs = game.UpgradesById || {};
+      Object.keys(objs).forEach(function (k) { buildings[objs[k].name] = objs[k].amount; });
+      Object.keys(upgs).forEach(function (k) { if (upgs[k].bought) upgrades.push(upgs[k].name); });
       var out = {};
       Object.keys(base).forEach(function (k) { out[k] = base[k]; });
       out.buildings = buildings;

@@ -155,3 +155,16 @@ test('game registration: init never throws and save/load round-trip history', ()
     delete require.cache[require.resolve('../mod/main.js')];
   }
 });
+
+test('a mod error is written to an error file instead of failing silently', () => {
+  const G = fakeGame();
+  const tr = new ComboTracker();
+  tr.onTick = () => { throw new Error('tick boom'); };
+  const writes = [];
+  const rec = install(G, (n, c) => writes.push([n, c]), tr);
+  const origErr = console.error; console.error = () => {};
+  try { rec.tick(); } finally { console.error = origErr; }
+  const err = writes.find(w => w[0] === 'coachclaudeerror');
+  assert.ok(err, 'error file written');
+  assert.match(err[1], /tick boom/);
+});
