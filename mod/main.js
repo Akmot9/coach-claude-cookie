@@ -161,6 +161,42 @@
     };
   };
 
+  // ActionLog: player actions for the in-game panel (pure logic, no Game access)
+  var BURST_GAP = 1.5; // seconds: ticks closer than this extend the same click burst
+
+  function ActionLog(opts) {
+    opts = opts || {};
+    this.max = opts.max || 50;
+    this.list = [];
+    this.prevClicks = null;
+  }
+
+  ActionLog.prototype._push = function (a) {
+    this.list.push(a);
+    if (this.list.length > this.max) this.list.splice(0, this.list.length - this.max);
+  };
+
+  ActionLog.prototype.onEvent = function (e) {
+    if (e.type === 'golden') this._push({ kind: 'golden', t: e.t, wrath: e.wrath, earned: e.earned, buffs: e.buffs.slice() });
+    else if (e.type === 'buff' && !e.fromGolden) this._push({ kind: 'buff', t: e.t, name: e.name, duration: e.duration });
+    else if (e.type === 'spell') this._push({ kind: 'spell', t: e.t, spell: e.spell, ok: e.ok });
+  };
+
+  ActionLog.prototype.onTick = function (s) {
+    var prev = this.prevClicks;
+    this.prevClicks = s.clicks;
+    if (prev === null || s.clicks <= prev) return;
+    var d = s.clicks - prev, last = this.list[this.list.length - 1];
+    if (last && last.kind === 'clicks' && s.t - last.tEnd <= BURST_GAP) {
+      last.count += d;
+      last.tEnd = s.t;
+    } else {
+      this._push({ kind: 'clicks', t: s.t, tEnd: s.t, count: d });
+    }
+  };
+
+  ActionLog.prototype.actions = function () { return this.list; };
+
   var MOD_ID = 'coach claude cookie';
   var OUTPUT_NAME = 'coachclaudecookie';
   var LIVE_NAME = 'coachclaudelive';
@@ -191,7 +227,7 @@
         if (goldenBuffs) goldenBuffs.push(buff.name);
         emit({
           type: 'buff', t: now(), name: buff.name, duration: buff.maxTime / game.fps,
-          multCpS: num(buff.multCpS, 1), multClick: num(buff.multClick, 1),
+          multCpS: num(buff.multCpS, 1), multClick: num(buff.multClick, 1), fromGolden: !!goldenBuffs,
         });
       });
       return buff;
@@ -312,5 +348,5 @@
     });
   }
 
-  if (typeof module !== 'undefined' && module.exports) module.exports = { ComboTracker: ComboTracker, LiveFeed: LiveFeed, install: install };
+  if (typeof module !== 'undefined' && module.exports) module.exports = { ComboTracker: ComboTracker, LiveFeed: LiveFeed, ActionLog: ActionLog, install: install };
 })();
