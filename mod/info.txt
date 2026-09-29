@@ -1,0 +1,11 @@
+{
+	"Name": "Coach Claude Cookie",
+	"ID": "coach claude cookie",
+	"Author": "Akmot9",
+	"Description": "Records golden cookie combos in real time to file_outputs/coachclaudecookie.txt for coaching.",
+	"ModVersion": 1,
+	"GameVersion": 2.053,
+	"Date": "29/09/2026",
+	"Dependencies": [],
+	"AllowSteamAchievs": 1
+}

@@ -101,5 +101,114 @@
     };
   };
 
-  if (typeof module !== 'undefined' && module.exports) module.exports = { ComboTracker: ComboTracker };
+  var MOD_ID = 'coach claude cookie';
+  var OUTPUT_NAME = 'coachclaudecookie';
+
+  function install(game, send, tracker) {
+    var disabled = false;
+    var goldenBuffs = null; // buff names gained during a golden cookie click
+    var grimoireWrapped = false;
+
+    function safe(fn) {
+      if (disabled) return;
+      try { fn(); } catch (e) { disabled = true; console.error('[' + MOD_ID + ']', e); }
+    }
+    function now() { return Date.now() / 1000; }
+
+    var origGainBuff = game.gainBuff;
+    game.gainBuff = function () {
+      var buff = origGainBuff.apply(this, arguments);
+      safe(function () {
+        if (goldenBuffs) goldenBuffs.push(buff.name);
+        tracker.onEvent({
+          type: 'buff', t: now(), name: buff.name, duration: buff.maxTime / game.fps,
+          multCpS: buff.multCpS || 1, multClick: buff.multClick || 1,
+        });
+      });
+      return buff;
+    };
+
+    var golden = game.shimmerTypes.golden;
+    var origPop = golden.popFunc;
+    golden.popFunc = function (me) {
+      var before = game.cookiesEarned;
+      goldenBuffs = [];
+      var out;
+      try { out = origPop.apply(this, arguments); }
+      finally {
+        var gained = goldenBuffs;
+        goldenBuffs = null;
+        safe(function () {
+          tracker.onEvent({
+            type: 'golden', t: now(), wrath: !!(me && me.wrath),
+            earned: game.cookiesEarned - before, buffs: gained,
+          });
+        });
+      }
+      return out;
+    };
+
+    function wrapGrimoire() {
+      var tower = game.Objects['Wizard tower'];
+      var M = tower && tower.minigame;
+      if (!M || !M.spells) return;
+      Object.keys(M.spells).forEach(function (key) {
+        var spell = M.spells[key];
+        ['win', 'fail'].forEach(function (kind) {
+          var orig = spell[kind];
+          if (typeof orig !== 'function') return;
+          spell[kind] = function () {
+            var out = orig.apply(this, arguments);
+            safe(function () { tracker.onEvent({ type: 'spell', t: now(), spell: key, ok: kind === 'win' }); });
+            return out;
+          };
+        });
+      });
+      grimoireWrapped = true;
+    }
+
+    function snapshot() {
+      var M = game.Objects['Wizard tower'] && game.Objects['Wizard tower'].minigame;
+      var buffs = Object.keys(game.buffs).map(function (k) {
+        var b = game.buffs[k];
+        return { name: b.name, timeLeft: b.time / game.fps, multCpS: b.multCpS || 1, multClick: b.multClick || 1 };
+      });
+      return {
+        t: now(), cookies: game.cookies, cookiesEarned: game.cookiesEarned,
+        handmade: game.handmadeCookies, clicks: game.cookieClicks, cps: game.cookiesPs,
+        buffs: buffs, magic: M ? M.magic : null, magicMax: M ? M.magicM : null,
+      };
+    }
+
+    function tick() {
+      safe(function () {
+        if (!grimoireWrapped) wrapGrimoire();
+        tracker.onTick(snapshot());
+        if (tracker.changed) {
+          tracker.changed = false;
+          send(OUTPUT_NAME, JSON.stringify(tracker.state()));
+        }
+      });
+    }
+
+    return { tick: tick, disabled: function () { return disabled; } };
+  }
+
+  if (typeof Game !== 'undefined' && Game.registerMod) {
+    Game.registerMod(MOD_ID, {
+      init: function () {
+        var send = function (name, content) {
+          if (typeof window !== 'undefined' && window.api && window.api.send) {
+            window.api.send('toMain', { id: 'log to file', list: [[name, content]] });
+          }
+        };
+        var rec = install(Game, send, new ComboTracker());
+        Game.registerHook('logic', function () { if (Game.T % Game.fps === 0) rec.tick(); });
+      },
+      save: function () { return ''; },
+      load: function () {},
+    });
+  }
+
+  if (typeof module !== 'undefined' && module.exports) module.exports = { ComboTracker: ComboTracker, install: install };
 })();
