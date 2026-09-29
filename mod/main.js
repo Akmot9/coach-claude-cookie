@@ -197,6 +197,40 @@
 
   ActionLog.prototype.actions = function () { return this.list; };
 
+  function gives(name) {
+    return function (a) {
+      return (a.kind === 'golden' && a.buffs.indexOf(name) !== -1) || (a.kind === 'buff' && a.name === name);
+    };
+  }
+  function spellOk(key) { return function (a) { return a.kind === 'spell' && a.spell === key && a.ok; }; }
+  function isGolden(a) { return a.kind === 'golden'; }
+
+  var COMBO_RULES = [
+    { name: 'DOUBLE BONUS', first: gives('Frenzy'), second: gives('Click frenzy'), within: 77 },
+    { name: 'PROLONGATION', first: gives('Click frenzy'), second: spellOk('stretch time'), within: 13 },
+    { name: 'MAIN DU DESTIN', first: spellOk('hand of fate'), second: isGolden, within: 30 },
+    { name: 'INVOCATION BOOSTÉE', first: gives('Frenzy'), second: spellOk('conjure baked goods'), within: 77 },
+  ];
+
+  // Two actions are adjacent when only click bursts sit between them.
+  function detectCombos(actions) {
+    var found = [];
+    for (var i = 0; i < actions.length; i++) {
+      var j = i + 1;
+      while (j < actions.length && actions[j].kind === 'clicks') j++;
+      if (j >= actions.length) continue;
+      for (var r = 0; r < COMBO_RULES.length; r++) {
+        var rule = COMBO_RULES[r];
+        if (rule.first(actions[i]) && rule.second(actions[j]) && actions[j].t - actions[i].t <= rule.within) {
+          var idx = [];
+          for (var k = i; k <= j; k++) idx.push(k);
+          found.push({ name: rule.name, indices: idx });
+        }
+      }
+    }
+    return found;
+  }
+
   var MOD_ID = 'coach claude cookie';
   var OUTPUT_NAME = 'coachclaudecookie';
   var LIVE_NAME = 'coachclaudelive';
@@ -348,5 +382,5 @@
     });
   }
 
-  if (typeof module !== 'undefined' && module.exports) module.exports = { ComboTracker: ComboTracker, LiveFeed: LiveFeed, ActionLog: ActionLog, install: install };
+  if (typeof module !== 'undefined' && module.exports) module.exports = { ComboTracker: ComboTracker, LiveFeed: LiveFeed, ActionLog: ActionLog, detectCombos: detectCombos, install: install };
 })();
