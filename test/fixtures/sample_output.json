@@ -1,0 +1,13 @@
+{"version":1,"updated":1100,"current":null,"history":[
+ {"summary":{"start":1000,"end":1030,"duration":30,"earned":7700000000,"handmade":6900000000,"clicks":65,
+  "bestCpsMult":7,"bestClickMult":5439,"buffs":[{"name":"Frenzy","duration":77,"multCpS":7,"multClick":1},{"name":"Click frenzy","duration":13,"multCpS":1,"multClick":777}],
+  "golden":2,"spells":[{"spell":"conjure baked goods","ok":true}],"magicStart":19,"magicMax":19},
+  "events":[{"type":"golden","t":999.5,"wrath":false,"earned":0,"buffs":["Frenzy"]},
+   {"type":"buff","t":999.5,"name":"Frenzy","duration":77,"multCpS":7,"multClick":1},
+   {"type":"golden","t":1010,"wrath":false,"earned":0,"buffs":["Click frenzy"]},
+   {"type":"buff","t":1010,"name":"Click frenzy","duration":13,"multCpS":1,"multClick":777},
+   {"type":"spell","t":1012,"spell":"conjure baked goods","ok":true}],
+  "ticks":[
+   {"t":1010,"cookies":1,"cookiesEarned":1,"handmade":0,"clicks":0,"cps":1,"buffs":[{"name":"Click frenzy","timeLeft":13,"multCpS":1,"multClick":777}],"magic":19,"magicMax":19},
+   {"t":1023,"cookies":1,"cookiesEarned":1,"handmade":0,"clicks":65,"cps":1,"buffs":[{"name":"Click frenzy","timeLeft":0.1,"multCpS":1,"multClick":777}],"magic":7,"magicMax":19}]}
+]}
