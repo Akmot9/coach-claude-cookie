@@ -51,7 +51,7 @@ On dit que deux actions sont **côte à côte** quand elles se suivent dans la l
 Tout est ajouté dans `mod/main.js`, à côté des unités existantes.
 
 1. **ActionLog** (logique pure) :
-   - `onEvent(evt)` transforme les événements en actions. Il ignore un événement `buff` qui suit de moins de 0,1 s un `golden` contenant ce même bonus.
+   - `onEvent(evt)` transforme les événements en actions. Il ignore un événement `buff` marqué `fromGolden: true`. Le recorder pose cette marque quand le bonus est obtenu pendant un clic sur un cookie doré : l'événement `buff` arrive *avant* l'événement `golden`, donc une comparaison de temps ne suffirait pas.
    - `onTick(snapshot)` ajoute ou prolonge la rafale de clics à partir de la différence de `clicks` entre deux relevés.
    - `actions()` renvoie la liste, plafonnée à 50 actions en mémoire.
 2. **detectCombos(actions)** (fonction pure) : renvoie `[{name, indices}]` d'après les règles ci-dessus.
