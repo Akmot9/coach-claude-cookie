@@ -9,6 +9,8 @@ Cookie Clicker (Steam) mod that records every golden-cookie combo in real time. 
 
 - Live view: `resources/app/file_outputs/coachclaudelive.txt` (JSON), rewritten every second at all times. It holds the bank, CpS, active buffs, mana, sugar lumps, building counts, and the last 30 events: golden cookies, spells, buffs, building and upgrade purchases, and lump harvests.
 
+- Combo panel: an overlay at the bottom left of the screen, over the milk. It lists your last 12 actions (golden cookies, buffs, spells, click bursts) and highlights adjacent actions that form a known combo: DOUBLE BONUS, PROLONGATION, MAIN DU DESTIN, INVOCATION BOOSTÉE. It never blocks clicks.
+
 If the mod hits an internal error, it stops recording and writes the error to `file_outputs/coachclaudeerror.txt`. The game keeps running.
 
 The mod only observes: it does not change gameplay and does not block Steam achievements.

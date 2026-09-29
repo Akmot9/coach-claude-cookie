@@ -296,12 +296,38 @@
     return '<div class="ccc-title">' + TEXT_FR.title + '</div>' + rows.join('');
   }
 
+  var PANEL_ID = 'coachComboPanel';
+  var PANEL_CSS =
+    '#coachComboPanel .ccc-title{font-weight:bold;opacity:0.7;margin-bottom:2px}' +
+    '#coachComboPanel .ccc-row{padding:1px 3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
+    '#coachComboPanel .ccc-time{opacity:0.6}' +
+    '#coachComboPanel .ccc-hl{background:rgba(255,200,0,0.25);border-left:3px solid gold}' +
+    '#coachComboPanel .ccc-fail{color:#ff6b6b}' +
+    '#coachComboPanel .ccc-combo{color:gold;font-weight:bold;float:right;margin-left:6px}';
+
+  function mountPanel(doc) {
+    if (!doc || !doc.getElementById) return null;
+    var host = doc.getElementById('sectionLeft');
+    if (!host) return null;
+    var el = doc.getElementById(PANEL_ID);
+    if (el) return el;
+    var style = doc.createElement('style');
+    style.innerHTML = PANEL_CSS;
+    doc.head.appendChild(style);
+    el = doc.createElement('div');
+    el.id = PANEL_ID;
+    el.style.cssText = 'position:absolute;bottom:0;left:0;right:0;z-index:10;pointer-events:none;' +
+      'background:rgba(0,0,0,0.55);color:#eee;font:11px sans-serif;padding:4px 6px;max-height:40%;overflow:hidden;';
+    host.appendChild(el);
+    return el;
+  }
+
   var MOD_ID = 'coach claude cookie';
   var OUTPUT_NAME = 'coachclaudecookie';
   var LIVE_NAME = 'coachclaudelive';
   var ERROR_NAME = 'coachclaudeerror';
 
-  function install(game, send, tracker, live) {
+  function install(game, send, tracker, live, ui) {
     var disabled = false;
     var goldenBuffs = null; // buff names gained during a golden cookie click
 
@@ -317,6 +343,14 @@
     function emit(evt) {
       tracker.onEvent(evt);
       if (live) live.onEvent(evt);
+      if (ui) { ui.log.onEvent(evt); refreshPanel(); }
+    }
+    function refreshPanel() {
+      var el = mountPanel(ui.doc);
+      if (!el) return;
+      var acts = ui.log.actions();
+      var html = renderPanel(acts, detectCombos(acts), now());
+      if (el.__coachHtml !== html) { el.innerHTML = html; el.__coachHtml = html; }
     }
 
     var origGainBuff = game.gainBuff;
@@ -407,6 +441,7 @@
       safe(function () {
         wrapGrimoire(); // idempotent; re-wraps spells rebuilt by a hard reset
         var snap = snapshot();
+        if (ui) { ui.log.onTick(snap); refreshPanel(); }
         if (live) {
           live.onTick(liveSnapshot(snap));
           send(LIVE_NAME, JSON.stringify(live.state()));
@@ -432,7 +467,7 @@
               window.api.send('toMain', { id: 'log to file', list: [[name, content]] });
             }
           };
-          var rec = install(Game, send, tracker, new LiveFeed());
+          var rec = install(Game, send, tracker, new LiveFeed(), { log: new ActionLog(), doc: typeof document !== 'undefined' ? document : null });
           Game.registerHook('logic', function () { if (Game.T % Game.fps === 0) rec.tick(); });
         } catch (e) {
           console.error('[' + MOD_ID + ']', e);
@@ -447,5 +482,5 @@
     });
   }
 
-  if (typeof module !== 'undefined' && module.exports) module.exports = { ComboTracker: ComboTracker, LiveFeed: LiveFeed, ActionLog: ActionLog, detectCombos: detectCombos, renderPanel: renderPanel, install: install };
+  if (typeof module !== 'undefined' && module.exports) module.exports = { ComboTracker: ComboTracker, LiveFeed: LiveFeed, ActionLog: ActionLog, detectCombos: detectCombos, renderPanel: renderPanel, mountPanel: mountPanel, install: install };
 })();
