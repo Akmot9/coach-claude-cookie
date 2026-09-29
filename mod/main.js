@@ -231,6 +231,71 @@
     return found;
   }
 
+  var PANEL_ROWS = 12, PANEL_MAX_AGE = 300;
+  var TEXT_FR = {
+    buffs: {
+      'Frenzy': 'Frénésie', 'Click frenzy': 'Frénésie de clics', 'Dragonflight': 'Vol draconique',
+      'Elder frenzy': 'Frénésie des anciens', 'Clot': 'Caillot', 'Cursed finger': 'Doigt maudit',
+      'Dragon Harvest': 'Récolte draconique',
+    },
+    spells: {
+      'conjure baked goods': 'Invoquer des pâtisseries', 'hand of fate': 'Forcer la main du Destin',
+      'stretch time': 'Dilatation temporelle', 'spontaneous edifice': 'Édifice spontané',
+      "haggler's charm": 'Charme du marchandeur', 'summon crafty pixies': 'Invoquer des lutins habiles',
+      "gambler's fever dream": 'Rêve fébrile du parieur', 'resurrect abomination': 'Résurrection abominable',
+      'diminish ineptitude': "Réduire l'inaptitude",
+    },
+    golden: 'doré', wrath: 'de la colère', clicks: 'clics', cookies: 'cookies', title: 'COMBOS',
+  };
+
+  function esc(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function shortNum(n) {
+    var units = [[1e18, 'E'], [1e15, 'P'], [1e12, 'T'], [1e9, 'G'], [1e6, 'M'], [1e3, 'k']];
+    for (var i = 0; i < units.length; i++) {
+      if (Math.abs(n) >= units[i][0]) return (n / units[i][0]).toFixed(1).replace('.', ',') + ' ' + units[i][1];
+    }
+    return String(Math.round(n));
+  }
+
+  function hhmmss(t) {
+    var d = new Date(t * 1000);
+    return [d.getHours(), d.getMinutes(), d.getSeconds()].map(function (x) { return (x < 10 ? '0' : '') + x; }).join(':');
+  }
+
+  function actionText(a) {
+    var T = TEXT_FR;
+    if (a.kind === 'golden') {
+      var got = a.buffs.length
+        ? a.buffs.map(function (b) { return T.buffs[b] || b; }).join(', ')
+        : '+' + shortNum(a.earned) + ' ' + T.cookies;
+      return '🍪 ' + (a.wrath ? T.wrath : T.golden) + ' → ' + got;
+    }
+    if (a.kind === 'buff') return '⚡ ' + (T.buffs[a.name] || a.name) + ' ' + Math.round(a.duration) + ' s';
+    if (a.kind === 'spell') return '✨ ' + (T.spells[a.spell] || a.spell) + (a.ok ? ' ✔' : ' ✘');
+    return '👆 ×' + a.count + ' ' + T.clicks;
+  }
+
+  function renderPanel(actions, combos, now) {
+    var hl = {}, label = {};
+    combos.forEach(function (c) {
+      c.indices.forEach(function (i) { hl[i] = true; });
+      var last = c.indices[c.indices.length - 1];
+      (label[last] = label[last] || []).push(c.name);
+    });
+    var rows = [];
+    for (var i = Math.max(0, actions.length - PANEL_ROWS); i < actions.length; i++) {
+      var a = actions[i];
+      if (now - (a.tEnd || a.t) > PANEL_MAX_AGE) continue;
+      var cls = 'ccc-row' + (hl[i] ? ' ccc-hl' : '') + (a.kind === 'spell' && !a.ok ? ' ccc-fail' : '');
+      var lab = (label[i] || []).map(function (n) { return '<span class="ccc-combo">★ ' + esc(n) + '</span>'; }).join('');
+      rows.push('<div class="' + cls + '"><span class="ccc-time">' + hhmmss(a.t) + '</span> ' + esc(actionText(a)) + lab + '</div>');
+    }
+    return '<div class="ccc-title">' + TEXT_FR.title + '</div>' + rows.join('');
+  }
+
   var MOD_ID = 'coach claude cookie';
   var OUTPUT_NAME = 'coachclaudecookie';
   var LIVE_NAME = 'coachclaudelive';
@@ -382,5 +447,5 @@
     });
   }
 
-  if (typeof module !== 'undefined' && module.exports) module.exports = { ComboTracker: ComboTracker, LiveFeed: LiveFeed, ActionLog: ActionLog, detectCombos: detectCombos, install: install };
+  if (typeof module !== 'undefined' && module.exports) module.exports = { ComboTracker: ComboTracker, LiveFeed: LiveFeed, ActionLog: ActionLog, detectCombos: detectCombos, renderPanel: renderPanel, install: install };
 })();
