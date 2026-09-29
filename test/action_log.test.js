@@ -81,3 +81,11 @@ test('golden action carries the durations of buffs it gave', () => {
   a.onEvent({ type: 'golden', t: 9, wrath: false, earned: 3, buffs: [] });
   assert.deepStrictEqual(a.actions().map(x => x.durations), [{ Frenzy: 154 }, {}]);
 });
+
+test('no click burst from the save loading during the first ticks', () => {
+  const a = new ActionLog({ warmup: 2 });
+  a.onTick({ t: 0, clicks: 0 });
+  a.onTick({ t: 1, clicks: 12133 });
+  a.onTick({ t: 2, clicks: 12140 });
+  assert.deepStrictEqual(a.actions(), [{ kind: 'clicks', t: 2, tEnd: 2, count: 7 }]);
+});

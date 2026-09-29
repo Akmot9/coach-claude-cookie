@@ -68,3 +68,11 @@ test('install writes the live file every tick even without a combo', () => {
   assert.deepStrictEqual(live[1].events.map(e => e.type).sort(), ['buff', 'building', 'upgrade']);
   assert.ok(!writes.some(w => w[0] === 'coachclaudecookie'), 'no combo file without a combo');
 });
+
+test('ignores changes during the first ticks while the save loads', () => {
+  const f = new LiveFeed({ warmup: 2 });
+  f.onTick(snap(0, { upgrades: [], lumps: -1, buildings: {} }));
+  f.onTick(snap(1)); // save just loaded: everything "appears"
+  f.onTick(snap(2, { lumps: 3 }));
+  assert.deepStrictEqual(f.state().events, [{ type: 'lump', t: 2, delta: 1, lumps: 3 }]);
+});

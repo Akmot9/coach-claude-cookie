@@ -126,6 +126,8 @@
   function LiveFeed(opts) {
     opts = opts || {};
     this.maxEvents = opts.maxEvents || 30;
+    this.warmup = opts.warmup || 0; // ticks to ignore while the save is still loading
+    this.ticks = 0;
     this.events = [];
     this.last = null;
   }
@@ -137,7 +139,8 @@
 
   LiveFeed.prototype.onTick = function (s) {
     var prev = this.last, self = this;
-    if (prev) {
+    this.ticks++;
+    if (prev && this.ticks > this.warmup) {
       var names = Object.keys(prev.buildings);
       Object.keys(s.buildings).forEach(function (n) { if (names.indexOf(n) === -1) names.push(n); });
       names.forEach(function (n) {
@@ -167,6 +170,8 @@
   function ActionLog(opts) {
     opts = opts || {};
     this.max = opts.max || 50;
+    this.warmup = opts.warmup || 0; // ticks to ignore while the save is still loading
+    this.ticks = 0;
     this.list = [];
     this.prevClicks = null;
     this.pendingDurations = {}; // durations of buffs gained inside the golden click being processed
@@ -189,7 +194,8 @@
   ActionLog.prototype.onTick = function (s) {
     var prev = this.prevClicks;
     this.prevClicks = s.clicks;
-    if (prev === null || s.clicks <= prev) return;
+    this.ticks++;
+    if (prev === null || this.ticks <= this.warmup || s.clicks <= prev) return;
     var d = s.clicks - prev, last = this.list[this.list.length - 1];
     if (last && last.kind === 'clicks' && s.t - last.tEnd <= BURST_GAP) {
       last.count += d;
@@ -505,7 +511,8 @@
               window.api.send('toMain', { id: 'log to file', list: [[name, content]] });
             }
           };
-          var rec = install(Game, send, tracker, new LiveFeed(), { log: new ActionLog(), doc: typeof document !== 'undefined' ? document : null });
+          // the save loads after the mod starts: ignore the first 3 s of apparent changes
+          var rec = install(Game, send, tracker, new LiveFeed({ warmup: 3 }), { log: new ActionLog({ warmup: 3 }), doc: typeof document !== 'undefined' ? document : null });
           Game.registerHook('logic', function () { if (Game.T % Game.fps === 0) rec.tick(); });
         } catch (e) {
           console.error('[' + MOD_ID + ']', e);
