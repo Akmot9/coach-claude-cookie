@@ -169,6 +169,7 @@
     this.max = opts.max || 50;
     this.list = [];
     this.prevClicks = null;
+    this.pendingDurations = {}; // durations of buffs gained inside the golden click being processed
   }
 
   ActionLog.prototype._push = function (a) {
@@ -177,8 +178,11 @@
   };
 
   ActionLog.prototype.onEvent = function (e) {
-    if (e.type === 'golden') this._push({ kind: 'golden', t: e.t, wrath: e.wrath, earned: e.earned, buffs: e.buffs.slice() });
-    else if (e.type === 'buff' && !e.fromGolden) this._push({ kind: 'buff', t: e.t, name: e.name, duration: e.duration });
+    if (e.type === 'golden') {
+      this._push({ kind: 'golden', t: e.t, wrath: e.wrath, earned: e.earned, buffs: e.buffs.slice(), durations: this.pendingDurations });
+      this.pendingDurations = {};
+    } else if (e.type === 'buff' && e.fromGolden) this.pendingDurations[e.name] = e.duration;
+    else if (e.type === 'buff') this._push({ kind: 'buff', t: e.t, name: e.name, duration: e.duration });
     else if (e.type === 'spell') this._push({ kind: 'spell', t: e.t, spell: e.spell, ok: e.ok });
   };
 
@@ -205,26 +209,49 @@
   function spellOk(key) { return function (a) { return a.kind === 'spell' && a.spell === key && a.ok; }; }
   function isGolden(a) { return a.kind === 'golden'; }
 
+  // Seconds the first step's buff lasts: the real duration when known (effect-duration upgrades), else the base one.
+  function buffWindow(name, base) {
+    return function (a) {
+      if (a.kind === 'golden' && a.durations && typeof a.durations[name] === 'number') return a.durations[name];
+      if (a.kind === 'buff' && a.name === name && typeof a.duration === 'number') return a.duration;
+      return base;
+    };
+  }
+  function fixedWindow(sec) { return function () { return sec; }; }
+
   var COMBO_RULES = [
-    { name: 'DOUBLE BONUS', first: gives('Frenzy'), second: gives('Click frenzy'), within: 77 },
-    { name: 'PROLONGATION', first: gives('Click frenzy'), second: spellOk('stretch time'), within: 13 },
-    { name: 'MAIN DU DESTIN', first: spellOk('hand of fate'), second: isGolden, within: 30 },
-    { name: 'INVOCATION BOOSTÉE', first: gives('Frenzy'), second: spellOk('conjure baked goods'), within: 77 },
+    { name: 'DOUBLE BONUS', first: gives('Frenzy'), second: gives('Click frenzy'), window: buffWindow('Frenzy', 77) },
+    { name: 'PROLONGATION', first: gives('Click frenzy'), second: spellOk('stretch time'), window: buffWindow('Click frenzy', 13) },
+    { name: 'MAIN DU DESTIN', first: spellOk('hand of fate'), second: isGolden, window: fixedWindow(30) },
+    { name: 'INVOCATION BOOSTÉE', first: gives('Frenzy'), second: spellOk('conjure baked goods'), window: buffWindow('Frenzy', 77) },
   ];
 
-  // Two actions are adjacent when only click bursts sit between them.
+  // Actions that may sit between two combo steps without breaking them:
+  // click bursts, a successful Hand of Fate (it sets up the next golden cookie),
+  // and buff lines other than the combo buffs themselves (e.g. Godzamok's Devastation).
+  function isLink(a) {
+    if (a.kind === 'clicks') return true;
+    if (a.kind === 'spell') return a.spell === 'hand of fate' && a.ok;
+    if (a.kind === 'buff') return a.name !== 'Frenzy' && a.name !== 'Click frenzy';
+    return false;
+  }
+
   function detectCombos(actions) {
     var found = [];
     for (var i = 0; i < actions.length; i++) {
-      var j = i + 1;
-      while (j < actions.length && actions[j].kind === 'clicks') j++;
-      if (j >= actions.length) continue;
       for (var r = 0; r < COMBO_RULES.length; r++) {
         var rule = COMBO_RULES[r];
-        if (rule.first(actions[i]) && rule.second(actions[j]) && actions[j].t - actions[i].t <= rule.within) {
-          var idx = [];
-          for (var k = i; k <= j; k++) idx.push(k);
-          found.push({ name: rule.name, indices: idx });
+        if (!rule.first(actions[i])) continue;
+        var limit = rule.window(actions[i]);
+        for (var j = i + 1; j < actions.length; j++) {
+          if (actions[j].t - actions[i].t > limit) break;
+          if (rule.second(actions[j])) {
+            var idx = [];
+            for (var k = i; k <= j; k++) idx.push(k);
+            found.push({ name: rule.name, indices: idx });
+            break;
+          }
+          if (!isLink(actions[j])) break;
         }
       }
     }
@@ -316,7 +343,9 @@
     doc.head.appendChild(style);
     el = doc.createElement('div');
     el.id = PANEL_ID;
-    el.style.cssText = 'position:absolute;bottom:0;left:0;right:0;z-index:10;pointer-events:none;' +
+    // left/right margins keep the dragon/Santa buttons (canvas, bottom-left) and the Cursor's
+    // product buttons (#sectionLeftExtra, bottom-right, z-index 10) visible
+    el.style.cssText = 'position:absolute;bottom:0;left:70px;right:70px;z-index:9;pointer-events:none;' +
       'background:rgba(0,0,0,0.55);color:#eee;font:11px sans-serif;padding:4px 6px;max-height:40%;overflow:hidden;';
     host.appendChild(el);
     return el;
@@ -345,12 +374,21 @@
       if (live) live.onEvent(evt);
       if (ui) { ui.log.onEvent(evt); refreshPanel(); }
     }
+    var panelDisabled = false;
+    // The panel is cosmetic: its errors turn off the panel only, never the recording.
     function refreshPanel() {
-      var el = mountPanel(ui.doc);
-      if (!el) return;
-      var acts = ui.log.actions();
-      var html = renderPanel(acts, detectCombos(acts), now());
-      if (el.__coachHtml !== html) { el.innerHTML = html; el.__coachHtml = html; }
+      if (panelDisabled) return;
+      try {
+        var el = mountPanel(ui.doc);
+        if (!el) return;
+        var acts = ui.log.actions();
+        var html = renderPanel(acts, detectCombos(acts), now());
+        if (el.__coachHtml !== html) { el.innerHTML = html; el.__coachHtml = html; }
+      } catch (e) {
+        panelDisabled = true;
+        console.error('[' + MOD_ID + '] panel', e);
+        try { send(ERROR_NAME, new Date().toISOString() + ' panel: ' + String(e && e.stack || e)); } catch (e2) { /* nothing left to do */ }
+      }
     }
 
     var origGainBuff = game.gainBuff;

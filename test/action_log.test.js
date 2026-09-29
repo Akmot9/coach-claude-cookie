@@ -8,7 +8,7 @@ test('events become actions', () => {
   a.onEvent({ type: 'buff', t: 2, name: 'Clot', duration: 66, multCpS: 0.5, multClick: 1, fromGolden: false });
   a.onEvent({ type: 'spell', t: 3, spell: 'stretch time', ok: false });
   assert.deepStrictEqual(a.actions(), [
-    { kind: 'golden', t: 1, wrath: false, earned: 5, buffs: ['Frenzy'] },
+    { kind: 'golden', t: 1, wrath: false, earned: 5, buffs: ['Frenzy'], durations: {} },
     { kind: 'buff', t: 2, name: 'Clot', duration: 66 },
     { kind: 'spell', t: 3, spell: 'stretch time', ok: false },
   ]);
@@ -72,4 +72,12 @@ test('recorder marks buffs gained during a golden click', () => {
   G.shimmerTypes.golden.popFunc({});
   const buffs = events.filter(e => e.type === 'buff');
   assert.deepStrictEqual(buffs.map(b => [b.name, b.fromGolden]), [['Clot', false], ['Frenzy', true]]);
+});
+
+test('golden action carries the durations of buffs it gave', () => {
+  const a = new ActionLog();
+  a.onEvent({ type: 'buff', t: 1, name: 'Frenzy', duration: 154, multCpS: 7, multClick: 1, fromGolden: true });
+  a.onEvent({ type: 'golden', t: 1, wrath: false, earned: 0, buffs: ['Frenzy'] });
+  a.onEvent({ type: 'golden', t: 9, wrath: false, earned: 3, buffs: [] });
+  assert.deepStrictEqual(a.actions().map(x => x.durations), [{ Frenzy: 154 }, {}]);
 });

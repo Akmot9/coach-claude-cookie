@@ -32,7 +32,14 @@ Le panneau montre les **12 dernières actions**, la plus récente en bas, avec p
 
 ## Combos reconnus
 
-On dit que deux actions sont **côte à côte** quand elles se suivent dans la liste, sans compter les rafales de clics entre elles (on peut cliquer entre deux étapes).
+On dit que deux actions sont **côte à côte** quand seuls des « liens » les séparent. Les liens sont :
+- les rafales de clics ;
+- un « Forcer la main du Destin » réussi, qui prépare le cookie doré suivant ;
+- les lignes de bonus autres que Frénésie et Frénésie de clics, par exemple la Dévastation de Godzamok.
+
+*Révision après relecture.*
+
+Les limites de temps utilisent la durée **réelle** du bonus de la première étape quand elle est connue, car les améliorations de durée des effets la rallongent. Sinon, on garde 77 s et 13 s.
 
 | Nom affiché | Règle |
 |---|---|
@@ -57,7 +64,7 @@ Tout est ajouté dans `mod/main.js`, à côté des unités existantes.
 2. **detectCombos(actions)** (fonction pure) : renvoie `[{name, indices}]` d'après les règles ci-dessus.
 3. **renderPanel(actions, combos, now)** (fonction pure) : renvoie le HTML des 12 dernières actions, en échappant tous les textes.
 4. **Montage** (seule partie qui touche le navigateur) :
-   - Il crée une fois `div#coachComboPanel` dans `#sectionLeft`, en position absolue en bas, sur toute la largeur, avec `z-index: 10` (le canvas du fond est à 5).
+   - Il crée une fois `div#coachComboPanel` dans `#sectionLeft`, en position absolue en bas, avec 70 px de marge à gauche et à droite pour ne pas cacher les boutons Dragon, Père Noël et Curseur, et avec `z-index: 9` (le canvas du fond est à 5, les boutons de bâtiment à 10).
    - Le panneau a `pointer-events: none` pour ne jamais bloquer les clics sur le cookie, un fond noir à 55 % d'opacité, et une police de 11 px.
    - Il n'est remis à jour que si le HTML a changé.
    - Il est appelé par le même tick qu'aujourd'hui (1 fois par seconde), et en plus juste après chaque événement, pour que l'affichage soit instantané.

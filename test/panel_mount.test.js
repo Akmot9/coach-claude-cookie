@@ -23,6 +23,9 @@ test('mounts once in sectionLeft with pointer-events none', () => {
   assert.strictEqual(doc.getElementById('sectionLeft').children.length, 1);
   assert.match(el.style.cssText, /pointer-events:\s*none/);
   assert.match(el.style.cssText, /bottom:\s*0/);
+  assert.match(el.style.cssText, /left:\s*70px/, 'leaves room for dragon/santa buttons');
+  assert.match(el.style.cssText, /right:\s*70px/, 'leaves room for cursor product buttons');
+  assert.match(el.style.cssText, /z-index:\s*9\b/, 'below product buttons (z-index 10)');
   assert.strictEqual(mountPanel(doc), el);
   assert.strictEqual(doc.getElementById('sectionLeft').children.length, 1);
   assert.strictEqual(doc.head.children.length, 1, 'style added once');
@@ -48,4 +51,30 @@ test('install updates the panel on events and ticks', () => {
   G.cookieClicks = 0; rec.tick();
   G.cookieClicks = 12; rec.tick();
   assert.match(el.innerHTML, /×12 clics/);
+});
+
+test('a panel error does not stop combo recording', () => {
+  const G = {
+    fps: 30, cookies: 0, cookiesEarned: 0, handmadeCookies: 0, cookieClicks: 0, cookiesPs: 0, buffs: {},
+    gainBuff(n) { const b = { name: n, time: 30, maxTime: 30, multCpS: 7 }; this.buffs[n] = b; return b; },
+    shimmerTypes: { golden: { popFunc() {} } }, Objects: {},
+  };
+  const badDoc = { getElementById() { throw new Error('dom boom'); } };
+  const tr = new ComboTracker();
+  const seen = [];
+  const orig = tr.onEvent.bind(tr);
+  tr.onEvent = e => { seen.push(e.type); orig(e); };
+  const writes = [];
+  const origErr = console.error; console.error = () => {};
+  let rec;
+  try {
+    rec = install(G, (n, c) => writes.push(n), tr, null, { log: new ActionLog(), doc: badDoc });
+    G.gainBuff('Frenzy');
+    rec.tick();
+    G.gainBuff('Click frenzy');
+  } finally { console.error = origErr; }
+  assert.strictEqual(rec.disabled(), false);
+  assert.deepStrictEqual(seen, ['buff', 'buff']);
+  assert.ok(writes.includes('coachclaudeerror'));
+  assert.ok(writes.includes('coachclaudecookie'));
 });

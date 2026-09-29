@@ -49,3 +49,21 @@ test('boosted conjure; buff actions count as giving the buff', () => {
 test('no actions, no combos', () => {
   assert.deepStrictEqual(detectCombos([]), []);
 });
+
+test('a successful hand of fate between frenzy and click frenzy keeps DOUBLE BONUS', () => {
+  assert.deepStrictEqual(detectCombos([g(0, ['Frenzy']), sp(5, 'hand of fate'), g(8, ['Click frenzy'])]), [
+    { name: 'DOUBLE BONUS', indices: [0, 1, 2] },
+    { name: 'MAIN DU DESTIN', indices: [1, 2] },
+  ]);
+});
+
+test('other buff lines (e.g. devastation) do not break a combo', () => {
+  const dev = { kind: 'buff', t: 11, name: 'Devastation', duration: 10 };
+  assert.deepStrictEqual(detectCombos([g(10, ['Click frenzy']), dev, sp(12, 'stretch time')]),
+    [{ name: 'PROLONGATION', indices: [0, 1, 2] }]);
+});
+
+test('window uses the real buff duration when known', () => {
+  const f = { kind: 'golden', t: 0, wrath: false, earned: 0, buffs: ['Frenzy'], durations: { Frenzy: 154 } };
+  assert.deepStrictEqual(detectCombos([f, g(100, ['Click frenzy'])]), [{ name: 'DOUBLE BONUS', indices: [0, 1] }]);
+});
