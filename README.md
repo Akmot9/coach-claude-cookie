@@ -1,0 +1,30 @@
+# Coach Claude Cookie
+
+Cookie Clicker (Steam) mod that records every golden-cookie combo in real time. It is built so an AI coach can review your combos second by second.
+
+## What it records
+- A combo starts when a buff multiplies production or clicks. It ends 5 s after the last such buff.
+- For each combo it records the golden cookies clicked, the buffs gained, the Grimoire spells (success or backfire), the clicks, and a snapshot every second.
+- Output: `resources/app/file_outputs/coachclaudecookie.txt` (JSON). It holds the current combo plus the last 50 combos, and the last 5 keep their per-second snapshots.
+
+The mod only observes: it does not change gameplay and does not block Steam achievements.
+
+## Install (Steam, Linux)
+```bash
+git clone https://github.com/Akmot9/coach-claude-cookie.git
+ln -s "$PWD/coach-claude-cookie/mod" \
+  "$HOME/.local/share/Steam/steamapps/common/Cookie Clicker/resources/app/mods/local/coach claude cookie"
+```
+Then in game: Options → Mods → enable **Coach Claude Cookie** → restart.
+
+## Report
+```bash
+python3 tools/combo_report.py        # last combo, in French
+python3 tools/combo_report.py --all  # table of all kept combos
+```
+
+## Tests
+```bash
+node --test test/*.test.js
+python3 -m unittest discover -s test -p 'test_*.py'
+```
