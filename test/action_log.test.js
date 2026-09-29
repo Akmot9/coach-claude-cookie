@@ -9,8 +9,8 @@ test('events become actions', () => {
   a.onEvent({ type: 'spell', t: 3, spell: 'stretch time', ok: false });
   assert.deepStrictEqual(a.actions(), [
     { kind: 'golden', t: 1, wrath: false, earned: 5, buffs: ['Frenzy'], durations: {} },
-    { kind: 'buff', t: 2, name: 'Clot', duration: 66 },
-    { kind: 'spell', t: 3, spell: 'stretch time', ok: false },
+    { kind: 'buff', t: 2, name: 'Clot', duration: 66, icon: undefined },
+    { kind: 'spell', t: 3, spell: 'stretch time', ok: false, icon: undefined },
   ]);
 });
 
@@ -88,4 +88,11 @@ test('no click burst from the save loading during the first ticks', () => {
   a.onTick({ t: 1, clicks: 12133 });
   a.onTick({ t: 2, clicks: 12140 });
   assert.deepStrictEqual(a.actions(), [{ kind: 'clicks', t: 2, tEnd: 2, count: 7 }]);
+});
+
+test('buff and spell icons are kept on actions', () => {
+  const a = new ActionLog();
+  a.onEvent({ type: 'buff', t: 1, name: 'Clot', duration: 66, multCpS: 0.5, multClick: 1, fromGolden: false, icon: [15, 5] });
+  a.onEvent({ type: 'spell', t: 2, spell: 'stretch time', ok: true, icon: [23, 11] });
+  assert.deepStrictEqual(a.actions().map(x => x.icon), [[15, 5], [23, 11]]);
 });

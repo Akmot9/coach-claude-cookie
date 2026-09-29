@@ -168,3 +168,18 @@ test('a mod error is written to an error file instead of failing silently', () =
   assert.ok(err, 'error file written');
   assert.match(err[1], /tick boom/);
 });
+
+test('buff and spell events carry the game icon', () => {
+  const G = fakeGame();
+  const tr = new ComboTracker();
+  const events = [];
+  tr.onEvent = e => events.push(e);
+  const rec = install(G, () => {}, tr);
+  const M = grimoire();
+  M.spells['stretch time'].icon = [23, 11];
+  G.Objects['Wizard tower'].minigame = M;
+  rec.tick();
+  const origGain = G.gainBuff;
+  M.spells['stretch time'].win();
+  assert.deepStrictEqual(events.find(e => e.type === 'spell').icon, [23, 11]);
+});

@@ -187,8 +187,8 @@
       this._push({ kind: 'golden', t: e.t, wrath: e.wrath, earned: e.earned, buffs: e.buffs.slice(), durations: this.pendingDurations });
       this.pendingDurations = {};
     } else if (e.type === 'buff' && e.fromGolden) this.pendingDurations[e.name] = e.duration;
-    else if (e.type === 'buff') this._push({ kind: 'buff', t: e.t, name: e.name, duration: e.duration });
-    else if (e.type === 'spell') this._push({ kind: 'spell', t: e.t, spell: e.spell, ok: e.ok });
+    else if (e.type === 'buff') this._push({ kind: 'buff', t: e.t, name: e.name, duration: e.duration, icon: e.icon });
+    else if (e.type === 'spell') this._push({ kind: 'spell', t: e.t, spell: e.spell, ok: e.ok, icon: e.icon });
   };
 
   ActionLog.prototype.onTick = function (s) {
@@ -278,7 +278,7 @@
       "gambler's fever dream": 'Rêve fébrile du parieur', 'resurrect abomination': 'Résurrection abominable',
       'diminish ineptitude': "Réduire l'inaptitude",
     },
-    golden: 'doré', wrath: 'de la colère', clicks: 'clics', cookies: 'cookies', title: 'COMBOS',
+    golden: 'doré', wrath: 'de la colère', clicks: 'clics', cookies: 'cookies', title: 'COMBOS', ok: 'OK', ko: 'RATÉ',
   };
 
   function esc(s) {
@@ -298,17 +298,33 @@
     return [d.getHours(), d.getMinutes(), d.getSeconds()].map(function (x) { return (x < 10 ? '0' : '') + x; }).join(':');
   }
 
+  // Icons come from the game's own sprite sheet (48 px cells), shown at 16 px.
+  // The game's text rendering cannot display emoji, so the panel uses only these icons and plain text.
+  var ICON_GOLDEN = [10, 14], ICON_CLICKS = [0, 0], ICON_SIZE = 16;
+
+  function actionIcon(a) {
+    if (a.kind === 'golden') return ICON_GOLDEN;
+    if (a.kind === 'clicks') return ICON_CLICKS;
+    return a.icon;
+  }
+
+  function iconHtml(icon) {
+    // icon[2] is a custom sheet from another mod with an unknown layout: skip it
+    if (!icon || typeof icon[0] !== 'number' || typeof icon[1] !== 'number' || icon[2]) return '';
+    return '<span class="ccc-ico" style="background-position:-' + icon[0] * ICON_SIZE + 'px -' + icon[1] * ICON_SIZE + 'px"></span>';
+  }
+
   function actionText(a) {
     var T = TEXT_FR;
     if (a.kind === 'golden') {
       var got = a.buffs.length
         ? a.buffs.map(function (b) { return T.buffs[b] || b; }).join(', ')
         : '+' + shortNum(a.earned) + ' ' + T.cookies;
-      return '🍪 ' + (a.wrath ? T.wrath : T.golden) + ' → ' + got;
+      return (a.wrath ? T.wrath : T.golden) + ' : ' + got;
     }
-    if (a.kind === 'buff') return '⚡ ' + (T.buffs[a.name] || a.name) + ' ' + Math.round(a.duration) + ' s';
-    if (a.kind === 'spell') return '✨ ' + (T.spells[a.spell] || a.spell) + (a.ok ? ' ✔' : ' ✘');
-    return '👆 ×' + a.count + ' ' + T.clicks;
+    if (a.kind === 'buff') return (T.buffs[a.name] || a.name) + ' ' + Math.round(a.duration) + ' s';
+    if (a.kind === 'spell') return T.spells[a.spell] || a.spell;
+    return '×' + a.count + ' ' + T.clicks;
   }
 
   function renderPanel(actions, combos, now) {
@@ -323,8 +339,12 @@
       var a = actions[i];
       if (now - (a.tEnd || a.t) > PANEL_MAX_AGE) continue;
       var cls = 'ccc-row' + (hl[i] ? ' ccc-hl' : '') + (a.kind === 'spell' && !a.ok ? ' ccc-fail' : '');
-      var lab = (label[i] || []).map(function (n) { return '<span class="ccc-combo">★ ' + esc(n) + '</span>'; }).join('');
-      rows.push('<div class="' + cls + '"><span class="ccc-time">' + hhmmss(a.t) + '</span> ' + esc(actionText(a)) + lab + '</div>');
+      var lab = (label[i] || []).map(function (n) { return '<span class="ccc-combo">[' + esc(n) + ']</span>'; }).join('');
+      var status = a.kind !== 'spell' ? '' : a.ok
+        ? ' <span class="ccc-ok">' + TEXT_FR.ok + '</span>'
+        : ' <span class="ccc-ko">' + TEXT_FR.ko + '</span>';
+      rows.push('<div class="' + cls + '">' + iconHtml(actionIcon(a)) + '<span class="ccc-time">' + hhmmss(a.t) + '</span> ' +
+        esc(actionText(a)) + status + lab + '</div>');
     }
     return '<div class="ccc-title">' + TEXT_FR.title + '</div>' + rows.join('');
   }
@@ -336,6 +356,10 @@
     '#coachComboPanel .ccc-time{opacity:0.6}' +
     '#coachComboPanel .ccc-hl{background:rgba(255,200,0,0.25);border-left:3px solid gold}' +
     '#coachComboPanel .ccc-fail{color:#ff6b6b}' +
+    '#coachComboPanel .ccc-ok{color:#6bff8f;font-weight:bold}' +
+    '#coachComboPanel .ccc-ko{color:#ff6b6b;font-weight:bold}' +
+    '#coachComboPanel .ccc-ico{display:inline-block;width:16px;height:16px;vertical-align:middle;margin-right:3px;' +
+    'background-image:url(img/icons.png);background-repeat:no-repeat;background-size:576px 592px}' +
     '#coachComboPanel .ccc-combo{color:gold;font-weight:bold;float:right;margin-left:6px}';
 
   function mountPanel(doc) {
@@ -404,7 +428,7 @@
         if (goldenBuffs) goldenBuffs.push(buff.name);
         emit({
           type: 'buff', t: now(), name: buff.name, duration: buff.maxTime / game.fps,
-          multCpS: num(buff.multCpS, 1), multClick: num(buff.multClick, 1), fromGolden: !!goldenBuffs,
+          multCpS: num(buff.multCpS, 1), multClick: num(buff.multClick, 1), fromGolden: !!goldenBuffs, icon: buff.icon,
         });
       });
       return buff;
@@ -442,7 +466,7 @@
           var wrapped = function () {
             var out = orig.apply(this, arguments);
             // castSpell treats -1 as "not cast" (e.g. Stretch Time with no buff to stretch)
-            if (out !== -1) safe(function () { emit({ type: 'spell', t: now(), spell: key, ok: kind === 'win' }); });
+            if (out !== -1) safe(function () { emit({ type: 'spell', t: now(), spell: key, ok: kind === 'win', icon: spell.icon }); });
             return out;
           };
           wrapped.__coachWrapped = true;

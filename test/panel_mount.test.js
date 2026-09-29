@@ -47,7 +47,7 @@ test('install updates the panel on events and ticks', () => {
   const rec = install(G, () => {}, new ComboTracker(), null, { log: new ActionLog(), doc });
   G.shimmerTypes.golden.popFunc({});
   const el = doc.getElementById('coachComboPanel');
-  assert.match(el.innerHTML, /doré → Frénésie/);
+  assert.match(el.innerHTML, /doré : Frénésie/);
   G.cookieClicks = 0; rec.tick();
   G.cookieClicks = 12; rec.tick();
   assert.match(el.innerHTML, /×12 clics/);
