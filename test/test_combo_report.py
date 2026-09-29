@@ -47,5 +47,18 @@ class ReportTest(unittest.TestCase):
             os.unlink(f.name)
 
 
+
+
+class RobustLoadTest(unittest.TestCase):
+    def test_non_object_json_and_directory(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as f:
+            f.write("null")
+        try:
+            self.assertIsInstance(cr.load(f.name), str)
+        finally:
+            os.unlink(f.name)
+        self.assertIsInstance(cr.load(tempfile.gettempdir()), str)
+
+
 if __name__ == "__main__":
     unittest.main()

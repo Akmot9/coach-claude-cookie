@@ -40,11 +40,16 @@ def fmt(n):
 def load(path):
     try:
         with open(path, encoding="utf-8") as f:
-            return json.load(f)
+            st = json.load(f)
+        if not isinstance(st, dict) or not isinstance(st.get("history"), list):
+            raise ValueError("unexpected format")
+        return st
     except FileNotFoundError:
         return f"Fichier introuvable : {path}. Le mod est-il activé et le jeu lancé ?"
-    except (json.JSONDecodeError, UnicodeDecodeError):
+    except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
         return f"Fichier illisible (peut-être en cours d'écriture) : {path}. Réessaie dans une seconde."
+    except OSError as e:
+        return f"Impossible de lire {path} : {e.strerror}."
 
 
 def buff_name(name):

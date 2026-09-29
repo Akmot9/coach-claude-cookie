@@ -105,3 +105,51 @@ test('changed flag set on tick in combo and on events', () => {
   c.onEvent({ type: 'spell', t: 1.2, spell: 'stretch time', ok: true });
   assert.strictEqual(c.changed, true);
 });
+
+test('long economic buffs (loan, sugar frenzy) do not start a combo', () => {
+  const c = new ComboTracker();
+  c.onTick(snap(0, { buffs: [{ name: 'Loan 1', timeLeft: 7000, duration: 7200, multCpS: 1.5, multClick: 1 }] }));
+  c.onTick(snap(1, { buffs: [{ name: 'Sugar frenzy', timeLeft: 3500, duration: 3600, multCpS: 3, multClick: 1 }] }));
+  assert.strictEqual(c.state().current, null);
+});
+
+test('combo ticks are capped', () => {
+  const c = new ComboTracker({ maxTicks: 10 });
+  for (let t = 0; t < 30; t++) c.onTick(snap(t, { buffs: [FRENZY] }));
+  assert.strictEqual(c.state().current.ticks.length, 10);
+  assert.strictEqual(c.state().current.ticks[9].t, 29);
+});
+
+test('cursed finger counts as a boost and keeps multCpS 0', () => {
+  const c = new ComboTracker();
+  c.onTick(snap(0));
+  c.onTick(snap(1, { buffs: [{ name: 'Cursed finger', timeLeft: 10, duration: 10, multCpS: 0, multClick: 1 }] }));
+  assert.ok(c.state().current);
+  assert.strictEqual(c.state().current.ticks[0].buffs[0].multCpS, 0);
+});
+
+test('a spell cast up to 15 s before the combo is attached', () => {
+  const c = new ComboTracker();
+  c.onTick(snap(0));
+  c.onEvent({ type: 'spell', t: 2, spell: 'hand of fate', ok: true });
+  c.onEvent({ type: 'golden', t: 5, wrath: false, earned: 0, buffs: [] }); // too old for non-spell
+  for (let t = 1; t < 12; t++) c.onTick(snap(t));
+  c.onTick(snap(12, { buffs: [FRENZY] }));
+  const ev = c.state().current.events;
+  assert.deepStrictEqual(ev.map(e => e.type), ['spell']);
+});
+
+test('history exports without ticks and imports back', () => {
+  const a = new ComboTracker();
+  a.onTick(snap(0, { buffs: [FRENZY] }));
+  a.onTick(snap(7));
+  const dump = a.exportHistory();
+  assert.ok(!JSON.parse(dump)[0].ticks);
+  const b = new ComboTracker();
+  b.importHistory(dump);
+  assert.strictEqual(b.changed, true, 'loaded history is written on next tick');
+  assert.strictEqual(b.state().history.length, 1);
+  assert.strictEqual(b.state().history[0].summary.start, 0);
+  b.importHistory('garbage{');
+  assert.strictEqual(b.state().history.length, 1);
+});

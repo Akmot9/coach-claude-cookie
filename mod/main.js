@@ -2,13 +2,22 @@
 (function () {
   'use strict';
 
-  var PRE_START_WINDOW = 2; // seconds of events kept before a combo starts
+  var PRE_START_WINDOW = 2;        // seconds of golden/buff events kept before a combo starts
+  var SPELL_PRE_START_WINDOW = 15; // a Force the Hand of Fate cast may precede its golden cookie by several seconds
+  var MAX_BOOST_DURATION = 300;    // longer buffs (loans, sugar frenzy) are economy, not combos
 
-  function isBoost(b) { return (b.multCpS || 1) > 1 || (b.multClick || 1) > 1; }
+  function num(x, dflt) { return typeof x === 'number' ? x : dflt; }
+
+  function isBoost(b) {
+    if (typeof b.duration === 'number' && b.duration > MAX_BOOST_DURATION) return false;
+    return b.name === 'Cursed finger' || num(b.multCpS, 1) > 1 || num(b.multClick, 1) > 1;
+  }
+
+  function preStartWindow(e) { return e.type === 'spell' ? SPELL_PRE_START_WINDOW : PRE_START_WINDOW; }
 
   function product(buffs, key) {
     var m = 1;
-    for (var i = 0; i < buffs.length; i++) m *= (buffs[i][key] || 1);
+    for (var i = 0; i < buffs.length; i++) m *= num(buffs[i][key], 1);
     return m;
   }
 
@@ -17,9 +26,10 @@
     this.endDelay = opts.endDelay || 5;
     this.maxHistory = opts.maxHistory || 50;
     this.maxDetailed = opts.maxDetailed || 5;
+    this.maxTicks = opts.maxTicks || 600;
     this.current = null;
     this.history = [];
-    this.recent = [];     // events seen outside a combo, pruned to PRE_START_WINDOW
+    this.recent = [];     // events seen outside a combo, pruned by preStartWindow
     this.prevTick = null;
     this.lastBoostT = null;
     this.changed = false;
@@ -37,23 +47,22 @@
   ComboTracker.prototype.onTick = function (s) {
     var boosting = s.buffs.some(isBoost);
     if (boosting && !this.current) {
-      var from = s.t - PRE_START_WINDOW;
       this.current = {
         start: s.t,
         base: this.prevTick || s,
         ticks: [],
-        events: this.recent.filter(function (e) { return e.t >= from; }),
+        events: this.recent.filter(function (e) { return e.t >= s.t - preStartWindow(e); }),
       };
       this.recent = [];
     }
     if (boosting) this.lastBoostT = s.t;
     if (this.current) {
       this.current.ticks.push(s);
+      if (this.current.ticks.length > this.maxTicks) this.current.ticks.shift();
       this.changed = true;
       if (!boosting && s.t - this.lastBoostT > this.endDelay) this._finish();
     } else {
-      var cutoff = s.t - PRE_START_WINDOW;
-      this.recent = this.recent.filter(function (e) { return e.t >= cutoff; });
+      this.recent = this.recent.filter(function (e) { return e.t >= s.t - preStartWindow(e); });
     }
     this.prevTick = s;
   };
@@ -91,6 +100,18 @@
     };
   }
 
+  ComboTracker.prototype.exportHistory = function () {
+    return JSON.stringify(this.history.map(function (h) { return { summary: h.summary, events: h.events }; }));
+  };
+
+  ComboTracker.prototype.importHistory = function (str) {
+    var h;
+    try { h = JSON.parse(str); } catch (e) { return; }
+    if (!Array.isArray(h)) return;
+    this.history = h.filter(function (x) { return x && x.summary; }).concat(this.history).slice(-this.maxHistory);
+    this.changed = true;
+  };
+
   ComboTracker.prototype.state = function () {
     var cur = this.current;
     return {
@@ -107,7 +128,6 @@
   function install(game, send, tracker) {
     var disabled = false;
     var goldenBuffs = null; // buff names gained during a golden cookie click
-    var grimoireWrapped = false;
 
     function safe(fn) {
       if (disabled) return;
@@ -122,7 +142,7 @@
         if (goldenBuffs) goldenBuffs.push(buff.name);
         tracker.onEvent({
           type: 'buff', t: now(), name: buff.name, duration: buff.maxTime / game.fps,
-          multCpS: buff.multCpS || 1, multClick: buff.multClick || 1,
+          multCpS: num(buff.multCpS, 1), multClick: num(buff.multClick, 1),
         });
       });
       return buff;
@@ -156,22 +176,27 @@
         var spell = M.spells[key];
         ['win', 'fail'].forEach(function (kind) {
           var orig = spell[kind];
-          if (typeof orig !== 'function') return;
-          spell[kind] = function () {
+          if (typeof orig !== 'function' || orig.__coachWrapped) return;
+          var wrapped = function () {
             var out = orig.apply(this, arguments);
-            safe(function () { tracker.onEvent({ type: 'spell', t: now(), spell: key, ok: kind === 'win' }); });
+            // castSpell treats -1 as "not cast" (e.g. Stretch Time with no buff to stretch)
+            if (out !== -1) safe(function () { tracker.onEvent({ type: 'spell', t: now(), spell: key, ok: kind === 'win' }); });
             return out;
           };
+          wrapped.__coachWrapped = true;
+          spell[kind] = wrapped;
         });
       });
-      grimoireWrapped = true;
     }
 
     function snapshot() {
       var M = game.Objects['Wizard tower'] && game.Objects['Wizard tower'].minigame;
       var buffs = Object.keys(game.buffs).map(function (k) {
         var b = game.buffs[k];
-        return { name: b.name, timeLeft: b.time / game.fps, multCpS: b.multCpS || 1, multClick: b.multClick || 1 };
+        return {
+          name: b.name, timeLeft: b.time / game.fps, duration: b.maxTime / game.fps,
+          multCpS: num(b.multCpS, 1), multClick: num(b.multClick, 1),
+        };
       });
       return {
         t: now(), cookies: game.cookies, cookiesEarned: game.cookiesEarned,
@@ -182,7 +207,7 @@
 
     function tick() {
       safe(function () {
-        if (!grimoireWrapped) wrapGrimoire();
+        wrapGrimoire(); // idempotent; re-wraps spells rebuilt by a hard reset
         tracker.onTick(snapshot());
         if (tracker.changed) {
           tracker.changed = false;
@@ -195,18 +220,27 @@
   }
 
   if (typeof Game !== 'undefined' && Game.registerMod) {
+    var tracker = new ComboTracker();
     Game.registerMod(MOD_ID, {
       init: function () {
-        var send = function (name, content) {
-          if (typeof window !== 'undefined' && window.api && window.api.send) {
-            window.api.send('toMain', { id: 'log to file', list: [[name, content]] });
-          }
-        };
-        var rec = install(Game, send, new ComboTracker());
-        Game.registerHook('logic', function () { if (Game.T % Game.fps === 0) rec.tick(); });
+        try {
+          var send = function (name, content) {
+            if (typeof window !== 'undefined' && window.api && window.api.send) {
+              window.api.send('toMain', { id: 'log to file', list: [[name, content]] });
+            }
+          };
+          var rec = install(Game, send, tracker);
+          Game.registerHook('logic', function () { if (Game.T % Game.fps === 0) rec.tick(); });
+        } catch (e) {
+          console.error('[' + MOD_ID + ']', e);
+        }
       },
-      save: function () { return ''; },
-      load: function () {},
+      save: function () {
+        try { return tracker.exportHistory(); } catch (e) { return ''; }
+      },
+      load: function (str) {
+        try { tracker.importHistory(str); } catch (e) { console.error('[' + MOD_ID + ']', e); }
+      },
     });
   }
 
