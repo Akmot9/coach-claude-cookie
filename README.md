@@ -7,6 +7,8 @@ Cookie Clicker (Steam) mod that records every golden-cookie combo in real time. 
 - For each combo it records the golden cookies clicked, the buffs gained, the Grimoire spells (success or backfire), the clicks, and a snapshot every second.
 - Output: `resources/app/file_outputs/coachclaudecookie.txt` (JSON). It holds the current combo plus the last 50 combos, and the last 5 keep their per-second snapshots.
 
+- Live view: `resources/app/file_outputs/coachclaudelive.txt` (JSON), rewritten every second at all times. It holds the bank, CpS, active buffs, mana, sugar lumps, building counts, and the last 30 events: golden cookies, spells, buffs, building and upgrade purchases, and lump harvests.
+
 The mod only observes: it does not change gameplay and does not block Steam achievements.
 
 ## Install (Steam, Linux)

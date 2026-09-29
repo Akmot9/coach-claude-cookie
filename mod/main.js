@@ -1,4 +1,4 @@
-/* Coach Claude Cookie — records golden-cookie combos to file_outputs/coachclaudecookie.txt */
+/* Coach Claude Cookie — records golden-cookie combos (coachclaudecookie.txt) and a live game view (coachclaudelive.txt) in file_outputs/ */
 (function () {
   'use strict';
 
@@ -122,10 +122,50 @@
     };
   };
 
+  // LiveFeed: always-on view of the game, rewritten every second (pure logic, no Game access)
+  function LiveFeed(opts) {
+    opts = opts || {};
+    this.maxEvents = opts.maxEvents || 30;
+    this.events = [];
+    this.last = null;
+  }
+
+  LiveFeed.prototype.onEvent = function (evt) {
+    this.events.push(evt);
+    if (this.events.length > this.maxEvents) this.events.splice(0, this.events.length - this.maxEvents);
+  };
+
+  LiveFeed.prototype.onTick = function (s) {
+    var prev = this.last, self = this;
+    if (prev) {
+      var names = Object.keys(prev.buildings);
+      Object.keys(s.buildings).forEach(function (n) { if (names.indexOf(n) === -1) names.push(n); });
+      names.forEach(function (n) {
+        var delta = (s.buildings[n] || 0) - (prev.buildings[n] || 0);
+        if (delta) self.onEvent({ type: 'building', t: s.t, name: n, delta: delta, amount: s.buildings[n] || 0 });
+      });
+      s.upgrades.forEach(function (n) {
+        if (prev.upgrades.indexOf(n) === -1) self.onEvent({ type: 'upgrade', t: s.t, name: n });
+      });
+      if (s.lumps !== prev.lumps) self.onEvent({ type: 'lump', t: s.t, delta: s.lumps - prev.lumps, lumps: s.lumps });
+    }
+    this.last = s;
+  };
+
+  LiveFeed.prototype.state = function () {
+    var s = this.last || {};
+    return {
+      version: 1, t: s.t, cookies: s.cookies, cookiesEarned: s.cookiesEarned, cps: s.cps,
+      handmade: s.handmade, clicks: s.clicks, buffs: s.buffs, magic: s.magic, magicMax: s.magicMax,
+      lumps: s.lumps, buildings: s.buildings, events: this.events,
+    };
+  };
+
   var MOD_ID = 'coach claude cookie';
   var OUTPUT_NAME = 'coachclaudecookie';
+  var LIVE_NAME = 'coachclaudelive';
 
-  function install(game, send, tracker) {
+  function install(game, send, tracker, live) {
     var disabled = false;
     var goldenBuffs = null; // buff names gained during a golden cookie click
 
@@ -134,13 +174,17 @@
       try { fn(); } catch (e) { disabled = true; console.error('[' + MOD_ID + ']', e); }
     }
     function now() { return Date.now() / 1000; }
+    function emit(evt) {
+      tracker.onEvent(evt);
+      if (live) live.onEvent(evt);
+    }
 
     var origGainBuff = game.gainBuff;
     game.gainBuff = function () {
       var buff = origGainBuff.apply(this, arguments);
       safe(function () {
         if (goldenBuffs) goldenBuffs.push(buff.name);
-        tracker.onEvent({
+        emit({
           type: 'buff', t: now(), name: buff.name, duration: buff.maxTime / game.fps,
           multCpS: num(buff.multCpS, 1), multClick: num(buff.multClick, 1),
         });
@@ -159,7 +203,7 @@
         var gained = goldenBuffs;
         goldenBuffs = null;
         safe(function () {
-          tracker.onEvent({
+          emit({
             type: 'golden', t: now(), wrath: !!(me && me.wrath),
             earned: game.cookiesEarned - before, buffs: gained,
           });
@@ -180,7 +224,7 @@
           var wrapped = function () {
             var out = orig.apply(this, arguments);
             // castSpell treats -1 as "not cast" (e.g. Stretch Time with no buff to stretch)
-            if (out !== -1) safe(function () { tracker.onEvent({ type: 'spell', t: now(), spell: key, ok: kind === 'win' }); });
+            if (out !== -1) safe(function () { emit({ type: 'spell', t: now(), spell: key, ok: kind === 'win' }); });
             return out;
           };
           wrapped.__coachWrapped = true;
@@ -205,10 +249,27 @@
       };
     }
 
+    function liveSnapshot(base) {
+      var buildings = {}, upgrades = [];
+      (game.ObjectsById || []).forEach(function (o) { buildings[o.name] = o.amount; });
+      (game.UpgradesById || []).forEach(function (u) { if (u.bought) upgrades.push(u.name); });
+      var out = {};
+      Object.keys(base).forEach(function (k) { out[k] = base[k]; });
+      out.buildings = buildings;
+      out.upgrades = upgrades;
+      out.lumps = game.lumps;
+      return out;
+    }
+
     function tick() {
       safe(function () {
         wrapGrimoire(); // idempotent; re-wraps spells rebuilt by a hard reset
-        tracker.onTick(snapshot());
+        var snap = snapshot();
+        if (live) {
+          live.onTick(liveSnapshot(snap));
+          send(LIVE_NAME, JSON.stringify(live.state()));
+        }
+        tracker.onTick(snap);
         if (tracker.changed) {
           tracker.changed = false;
           send(OUTPUT_NAME, JSON.stringify(tracker.state()));
@@ -229,7 +290,7 @@
               window.api.send('toMain', { id: 'log to file', list: [[name, content]] });
             }
           };
-          var rec = install(Game, send, tracker);
+          var rec = install(Game, send, tracker, new LiveFeed());
           Game.registerHook('logic', function () { if (Game.T % Game.fps === 0) rec.tick(); });
         } catch (e) {
           console.error('[' + MOD_ID + ']', e);
@@ -244,5 +305,5 @@
     });
   }
 
-  if (typeof module !== 'undefined' && module.exports) module.exports = { ComboTracker: ComboTracker, install: install };
+  if (typeof module !== 'undefined' && module.exports) module.exports = { ComboTracker: ComboTracker, LiveFeed: LiveFeed, install: install };
 })();
