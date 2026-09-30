@@ -285,6 +285,7 @@
       'diminish ineptitude': "Réduire l'inaptitude",
     },
     golden: 'doré', wrath: 'de la colère', clicks: 'clics', cookies: 'cookies', title: 'COMBOS', ok: 'OK', ko: 'RATÉ',
+    keys: 'Clic clavier : P / Espace',
   };
 
   function esc(s) {
@@ -352,7 +353,7 @@
       rows.push('<div class="' + cls + '">' + iconHtml(actionIcon(a)) + '<span class="ccc-time">' + hhmmss(a.t) + '</span> ' +
         esc(actionText(a)) + status + lab + '</div>');
     }
-    return '<div class="ccc-title">' + TEXT_FR.title + '</div>' + (fates && fates.length ? renderFates(fates) : '') + rows.join('');
+    return '<div class="ccc-title">' + TEXT_FR.title + ' <span class="ccc-time">' + TEXT_FR.keys + '</span></div>' + (fates && fates.length ? renderFates(fates) : '') + rows.join('');
   }
 
   // Force the Hand of Fate outcomes are deterministic: castSpell seeds Math.random with
@@ -438,6 +439,27 @@
       'background:rgba(0,0,0,0.55);color:#eee;font:11px sans-serif;padding:4px 6px;max-height:40%;overflow:hidden;';
     host.appendChild(el);
     return el;
+  }
+
+  // Keyboard clicks: each press of P or Space clicks the big cookie once, through the
+  // game's own Game.ClickCookie (same caps, stats and achievements as a mouse click).
+  // Held keys do not repeat, so this is not an auto-clicker.
+  var CLICK_KEYS = { 'p': true, 'P': true, ' ': true };
+  var TYPING_TAGS = { INPUT: true, TEXTAREA: true, SELECT: true };
+
+  function installKeyClicks(win, game) {
+    if (!win || typeof win.addEventListener !== 'function') return;
+    win.addEventListener('keydown', function (e) {
+      try {
+        if (!CLICK_KEYS[e.key] || e.repeat || e.ctrlKey || e.altKey || e.metaKey) return;
+        var t = e.target || {};
+        if (TYPING_TAGS[t.tagName] || t.isContentEditable) return;
+        if (e.key === ' ' && e.preventDefault) e.preventDefault(); // no scrolling / button activation
+        game.ClickCookie();
+      } catch (err) {
+        console.error('[' + MOD_ID + '] key click', err);
+      }
+    });
   }
 
   var MOD_ID = 'coach claude cookie';
@@ -630,6 +652,7 @@
           // the save loads after the mod starts: ignore the first 3 s of apparent changes
           var rec = install(Game, send, tracker, new LiveFeed({ warmup: 3 }), { log: new ActionLog({ warmup: 3 }), doc: typeof document !== 'undefined' ? document : null });
           Game.registerHook('logic', function () { if (Game.T % Game.fps === 0) rec.tick(); });
+          installKeyClicks(typeof window !== 'undefined' ? window : null, Game);
         } catch (e) {
           console.error('[' + MOD_ID + ']', e);
         }
@@ -643,5 +666,5 @@
     });
   }
 
-  if (typeof module !== 'undefined' && module.exports) module.exports = { ComboTracker: ComboTracker, LiveFeed: LiveFeed, ActionLog: ActionLog, detectCombos: detectCombos, renderPanel: renderPanel, predictFates: predictFates, mountPanel: mountPanel, install: install };
+  if (typeof module !== 'undefined' && module.exports) module.exports = { ComboTracker: ComboTracker, LiveFeed: LiveFeed, ActionLog: ActionLog, detectCombos: detectCombos, renderPanel: renderPanel, predictFates: predictFates, installKeyClicks: installKeyClicks, mountPanel: mountPanel, install: install };
 })();
