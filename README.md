@@ -11,6 +11,8 @@ Cookie Clicker (Steam) mod that records every golden-cookie combo in real time. 
 
 - Combo panel: an overlay at the bottom left of the screen, over the milk. It lists your last 12 actions (golden cookies, buffs, spells, click bursts) and highlights adjacent actions that form a known combo: DOUBLE BONUS, PROLONGATION, MAIN DU DESTIN, INVOCATION BOOSTÉE. It never blocks clicks.
 
+- Fate prediction: Force the Hand of Fate outcomes are deterministic (the game seeds its random generator with your run's seed and the number of spells cast). The panel shows the next 6 outcomes, for example `Destin : 13 : Frénésie · 14 : RATÉ (Caillot) · 15 : Frénésie de clics`, and they are also written to the live file. Any spell cast moves the counter forward, so you can spend cheap spells to skip bad outcomes. An extra golden cookie on screen raises the backfire chance, and the prediction updates to reflect it.
+
 If the mod hits an internal error, it stops recording and writes the error to `file_outputs/coachclaudeerror.txt`. The game keeps running.
 
 The mod only observes: it does not change gameplay and does not block Steam achievements.

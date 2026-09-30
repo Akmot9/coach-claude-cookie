@@ -166,7 +166,7 @@
     return {
       version: 1, t: s.t, cookies: s.cookies, cookiesEarned: s.cookiesEarned, cps: s.cps,
       handmade: s.handmade, clicks: s.clicks, buffs: s.buffs, magic: s.magic, magicMax: s.magicMax,
-      lumps: s.lumps, buildings: s.buildings, pantheon: s.pantheon || null, events: this.events,
+      lumps: s.lumps, buildings: s.buildings, pantheon: s.pantheon || null, fates: s.fates || null, events: this.events,
     };
   };
 
@@ -333,7 +333,7 @@
     return '×' + a.count + ' ' + T.clicks;
   }
 
-  function renderPanel(actions, combos, now) {
+  function renderPanel(actions, combos, now, fates) {
     var hl = {}, label = {};
     combos.forEach(function (c) {
       c.indices.forEach(function (i) { hl[i] = true; });
@@ -352,7 +352,58 @@
       rows.push('<div class="' + cls + '">' + iconHtml(actionIcon(a)) + '<span class="ccc-time">' + hhmmss(a.t) + '</span> ' +
         esc(actionText(a)) + status + lab + '</div>');
     }
-    return '<div class="ccc-title">' + TEXT_FR.title + '</div>' + rows.join('');
+    return '<div class="ccc-title">' + TEXT_FR.title + '</div>' + (fates && fates.length ? renderFates(fates) : '') + rows.join('');
+  }
+
+  // Force the Hand of Fate outcomes are deterministic: castSpell seeds Math.random with
+  // Game.seed + '/' + spellsCastTotal, then rolls success, then the golden cookie's init
+  // draws its x/y (plus a picture roll in valentines/easter), then the spell picks its effect.
+  // This mirrors minigameGrimoire.js 'hand of fate' win/fail and the golden shimmer initFunc.
+  function predictFates(rng, o) {
+    var out = [];
+    for (var n = o.start; n < o.start + o.count; n++) {
+      rng.seedrandom(o.seed + '/' + n);
+      var roll = rng.random();
+      var ok = roll < 1 - o.failChance;
+      if (o.season === 'valentines' || o.season === 'easter') rng.random();
+      rng.random(); rng.random(); // shimmer x, y
+      var choices;
+      if (ok) {
+        choices = ['frenzy', 'multiply cookies'];
+        if (!o.dragonflight) choices.push('click frenzy');
+        if (rng.random() < 0.1) choices.push('cookie storm', 'cookie storm', 'blab');
+        if (o.buildings10 && rng.random() < 0.25) choices.push('building special');
+        if (rng.random() < 0.15) choices = ['cookie storm drop'];
+        if (rng.random() < 0.0001) choices.push('free sugar lump');
+      } else {
+        choices = ['clot', 'ruin cookies'];
+        if (rng.random() < 0.1) choices.push('cursed finger', 'blood frenzy');
+        if (rng.random() < 0.003) choices.push('free sugar lump');
+        if (rng.random() < 0.1) choices = ['blab'];
+      }
+      out.push({ n: n, ok: ok, result: choices[Math.floor(rng.random() * choices.length)], roll: roll });
+    }
+    rng.seedrandom(); // back to an unseeded stream, as castSpell does
+    return out;
+  }
+
+  var FATE_FR = {
+    'frenzy': 'Frénésie', 'multiply cookies': 'Quelle chance', 'click frenzy': 'Frénésie de clics',
+    'building special': 'Bonus de bâtiment', 'cookie storm': 'Tempête', 'cookie storm drop': 'Mini-cookie',
+    'blab': 'Blabla', 'free sugar lump': 'Morceau de sucre', 'clot': 'Caillot', 'ruin cookies': 'Perte',
+    'cursed finger': 'Doigt maudit', 'blood frenzy': 'Frénésie des anciennes',
+  };
+  var FATE_GOOD = { 'click frenzy': true, 'building special': true };
+  var FATE_SHOWN = 6;
+
+  function renderFates(fates) {
+    var items = fates.slice(0, FATE_SHOWN).map(function (f) {
+      var label = esc(FATE_FR[f.result] || f.result);
+      if (!f.ok) return f.n + ' : <span class="ccc-ko">' + TEXT_FR.ko + ' (' + label + ')</span>';
+      if (FATE_GOOD[f.result]) return '<span class="ccc-good">' + f.n + ' : ' + label + '</span>';
+      return f.n + ' : ' + label;
+    });
+    return '<div class="ccc-fate">Destin : ' + items.join(' · ') + '</div>';
   }
 
   var PANEL_ID = 'coachComboPanel';
@@ -363,6 +414,8 @@
     '#coachComboPanel .ccc-hl{background:rgba(255,200,0,0.25);border-left:3px solid gold}' +
     '#coachComboPanel .ccc-fail{color:#ff6b6b}' +
     '#coachComboPanel .ccc-ok{color:#6bff8f;font-weight:bold}' +
+    '#coachComboPanel .ccc-fate{margin-bottom:3px;white-space:normal}' +
+    '#coachComboPanel .ccc-good{color:gold;font-weight:bold}' +
     '#coachComboPanel .ccc-ko{color:#ff6b6b;font-weight:bold}' +
     '#coachComboPanel .ccc-ico{display:inline-block;width:16px;height:16px;vertical-align:middle;margin-right:3px;' +
     'background-image:url(img/icons.png);background-repeat:no-repeat;background-size:576px 592px}' +
@@ -410,6 +463,25 @@
       if (live) live.onEvent(evt);
       if (ui) { ui.log.onEvent(evt); refreshPanel(); }
     }
+    var rng = (ui && ui.rng) || (typeof Math !== 'undefined' ? Math : null);
+    var fateKey = null, fates = null;
+    function currentFates() {
+      var tower = game.Objects && game.Objects['Wizard tower'];
+      var M = tower && tower.minigame;
+      if (!rng || typeof rng.seedrandom !== 'function' || !game.seed || !M || !M.spells || !M.spells['hand of fate'] ||
+          typeof M.spellsCastTotal !== 'number') return null;
+      var o = {
+        seed: game.seed, start: M.spellsCastTotal, count: 8,
+        failChance: M.getFailChance ? M.getFailChance(M.spells['hand of fate']) : 0.15,
+        buildings10: game.BuildingsOwned >= 10,
+        dragonflight: !!(game.hasBuff && game.hasBuff('Dragonflight')),
+        season: game.season || '',
+      };
+      var key = [o.seed, o.start, o.failChance, o.buildings10, o.dragonflight, o.season].join('|');
+      if (key !== fateKey) { fateKey = key; fates = predictFates(rng, o); }
+      return fates;
+    }
+
     var panelDisabled = false;
     // The panel is cosmetic: its errors turn off the panel only, never the recording.
     function refreshPanel() {
@@ -418,7 +490,7 @@
         var el = mountPanel(ui.doc);
         if (!el) return;
         var acts = ui.log.actions();
-        var html = renderPanel(acts, detectCombos(acts), now());
+        var html = renderPanel(acts, detectCombos(acts), now(), fates);
         if (el.__coachHtml !== html) { el.innerHTML = html; el.__coachHtml = html; }
       } catch (e) {
         panelDisabled = true;
@@ -520,6 +592,7 @@
       out.upgrades = upgrades;
       out.lumps = game.lumps;
       out.pantheon = pantheonSnapshot();
+      out.fates = fates;
       return out;
     }
 
@@ -527,6 +600,7 @@
       safe(function () {
         wrapGrimoire(); // idempotent; re-wraps spells rebuilt by a hard reset
         var snap = snapshot();
+        currentFates();
         if (ui) { ui.log.onTick(snap); refreshPanel(); }
         if (live) {
           live.onTick(liveSnapshot(snap));
@@ -569,5 +643,5 @@
     });
   }
 
-  if (typeof module !== 'undefined' && module.exports) module.exports = { ComboTracker: ComboTracker, LiveFeed: LiveFeed, ActionLog: ActionLog, detectCombos: detectCombos, renderPanel: renderPanel, mountPanel: mountPanel, install: install };
+  if (typeof module !== 'undefined' && module.exports) module.exports = { ComboTracker: ComboTracker, LiveFeed: LiveFeed, ActionLog: ActionLog, detectCombos: detectCombos, renderPanel: renderPanel, predictFates: predictFates, mountPanel: mountPanel, install: install };
 })();
