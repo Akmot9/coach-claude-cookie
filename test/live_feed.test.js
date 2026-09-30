@@ -76,3 +76,40 @@ test('ignores changes during the first ticks while the save loads', () => {
   f.onTick(snap(2, { lumps: 3 }));
   assert.deepStrictEqual(f.state().events, [{ type: 'lump', t: 2, delta: 1, lumps: 3 }]);
 });
+
+test('pantheon slot changes become events', () => {
+  const f = new LiveFeed();
+  f.onTick(snap(0, { pantheon: { slots: ['Dotjeiess', 'Muridal', null], swaps: 1 } }));
+  f.onTick(snap(1, { pantheon: { slots: ['Dotjeiess', 'Muridal', 'Mokalsium'], swaps: 0 } }));
+  f.onTick(snap(2, { pantheon: { slots: ['Dotjeiess', null, 'Mokalsium'], swaps: 0 } }));
+  assert.deepStrictEqual(f.state().pantheon, { slots: ['Dotjeiess', null, 'Mokalsium'], swaps: 0 });
+  assert.deepStrictEqual(f.state().events, [
+    { type: 'pantheon', t: 1, slot: 2, god: 'Mokalsium', prev: null, swaps: 0 },
+    { type: 'pantheon', t: 2, slot: 1, god: null, prev: 'Muridal', swaps: 0 },
+  ]);
+});
+
+test('install reads the pantheon from the Temple minigame', () => {
+  const G = {
+    fps: 30, cookies: 0, cookiesEarned: 0, handmadeCookies: 0, cookieClicks: 0, cookiesPs: 0, lumps: 0, buffs: {},
+    gainBuff() {}, shimmerTypes: { golden: { popFunc() {} } },
+    Objects: { Temple: { minigame: {
+      slot: [5, 6, -1], swaps: 1,
+      godsById: { 5: { name: 'Dotjeiess, Spirit of Creation' }, 6: { name: 'Muridal, Spirit of Labor' } },
+    } } },
+    ObjectsById: [], UpgradesById: {},
+  };
+  const writes = [];
+  const rec = install(G, (n, c) => writes.push([n, c]), new ComboTracker(), new LiveFeed());
+  rec.tick();
+  const live = JSON.parse(writes.find(w => w[0] === 'coachclaudelive')[1]);
+  assert.deepStrictEqual(live.pantheon, { slots: ['Dotjeiess', 'Muridal', null], swaps: 1 });
+});
+
+test('no temple minigame gives a null pantheon and no events', () => {
+  const f = new LiveFeed();
+  f.onTick(snap(0));
+  f.onTick(snap(1));
+  assert.strictEqual(f.state().pantheon, null);
+  assert.deepStrictEqual(f.state().events, []);
+});

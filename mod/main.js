@@ -151,6 +151,12 @@
         if (prev.upgrades.indexOf(n) === -1) self.onEvent({ type: 'upgrade', t: s.t, name: n });
       });
       if (s.lumps !== prev.lumps) self.onEvent({ type: 'lump', t: s.t, delta: s.lumps - prev.lumps, lumps: s.lumps });
+      if (s.pantheon && prev.pantheon) {
+        s.pantheon.slots.forEach(function (god, i) {
+          var before = prev.pantheon.slots[i];
+          if (god !== before) self.onEvent({ type: 'pantheon', t: s.t, slot: i, god: god, prev: before, swaps: s.pantheon.swaps });
+        });
+      }
     }
     this.last = s;
   };
@@ -160,7 +166,7 @@
     return {
       version: 1, t: s.t, cookies: s.cookies, cookiesEarned: s.cookiesEarned, cps: s.cps,
       handmade: s.handmade, clicks: s.clicks, buffs: s.buffs, magic: s.magic, magicMax: s.magicMax,
-      lumps: s.lumps, buildings: s.buildings, events: this.events,
+      lumps: s.lumps, buildings: s.buildings, pantheon: s.pantheon || null, events: this.events,
     };
   };
 
@@ -491,6 +497,17 @@
       };
     }
 
+    // Temple minigame: slots are [diamond, ruby, jade] god ids (-1 = empty)
+    function pantheonSnapshot() {
+      var M = game.Objects && game.Objects.Temple && game.Objects.Temple.minigame;
+      if (!M || !M.slot || !M.godsById) return null;
+      var slots = [0, 1, 2].map(function (i) {
+        var god = M.godsById[M.slot[i]];
+        return god ? String(god.name).split(',')[0] : null;
+      });
+      return { slots: slots, swaps: M.swaps };
+    }
+
     function liveSnapshot(base) {
       var buildings = {}, upgrades = [];
       // Game.ObjectsById is an array but Game.UpgradesById is an object: iterate keys for both
@@ -502,6 +519,7 @@
       out.buildings = buildings;
       out.upgrades = upgrades;
       out.lumps = game.lumps;
+      out.pantheon = pantheonSnapshot();
       return out;
     }
 
