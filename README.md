@@ -15,7 +15,7 @@ Cookie Clicker (Steam) mod that records every golden-cookie combo in real time. 
 
 - Keyboard clicks: each press of **P** or **Space** clicks the big cookie once, through the game's own click function, so the game's click cap, stats and achievements still apply. A held key does not repeat. The keys do nothing while you type text in the game or hold Ctrl/Alt.
 
-- Stock market: once the Bank minigame is unlocked, the live file lists each active good with its price, resting value, % of resting value, stock and maximum stock, trend, and your average buy price. The average includes the overhead. The game does not keep it, so it is only known for purchases made while the mod is running.
+- Stock market: once the Bank minigame is unlocked, the live file lists each active good with its price, resting value, % of resting value, stock and maximum stock, trend, and, when the [Suivi des ordres](https://github.com/Akmot9/cookie-suivi-des-ordres) mod is installed, your cost basis per good (average unit cost with overhead, unknown-cost quantity, realized P/L) read from its ledger.
 
 If the mod hits an internal error, it stops recording and writes the error to `file_outputs/coachclaudeerror.txt`. The game keeps running.
 

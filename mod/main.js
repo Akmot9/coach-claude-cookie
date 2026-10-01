@@ -607,62 +607,32 @@
       return { slots: slots, swaps: M.swaps };
     }
 
-    // Stock market (Bank minigame). The game does not remember what you paid, so the mod
-    // tracks a weighted average buy price (overhead included) from the purchases it sees.
+    // Stock market (Bank minigame). Cost basis comes from the "Suivi des ordres" mod's ledger when it is
+    // installed (Game.mods['suivi des ordres'].ledger); this mod keeps no purchase history of its own.
     var MARKET_MODES = ['stable', 'slow rise', 'slow fall', 'fast rise', 'fast fall', 'chaotic'];
-    var costs = {}; // good id -> { qty, total, unknown }
     function marketOf() {
       var bank = game.Objects && game.Objects.Bank;
       var M = bank && bank.minigame;
       return M && M.goodsById ? M : null;
     }
-    function wrapMarket() {
-      var M = marketOf();
-      if (!M) return;
-      if (typeof M.buyGood === 'function' && !M.buyGood.__coachWrapped) {
-        var origBuy = M.buyGood;
-        M.buyGood = function (id) {
-          var g = M.goodsById[id], before = g ? g.stock : 0, price = g ? g.val : 0;
-          var overhead = 1 + 0.01 * (20 * Math.pow(0.95, M.brokers || 0));
-          var out = origBuy.apply(this, arguments);
-          safe(function () {
-            if (!out || !g || g.stock <= before) return;
-            var c = costs[id];
-            if (!c || c.qty !== before) c = costs[id] = { qty: before, total: 0, unknown: before > 0 };
-            c.total += (g.stock - before) * price * overhead;
-            c.qty = g.stock;
-          });
-          return out;
-        };
-        M.buyGood.__coachWrapped = true;
-      }
-      if (typeof M.sellGood === 'function' && !M.sellGood.__coachWrapped) {
-        var origSell = M.sellGood;
-        M.sellGood = function (id) {
-          var g = M.goodsById[id], before = g ? g.stock : 0;
-          var out = origSell.apply(this, arguments);
-          safe(function () {
-            var c = costs[id];
-            if (!g || !c || g.stock >= before) return;
-            if (g.stock === 0) { delete costs[id]; return; }
-            c.total *= g.stock / before;
-            c.qty = g.stock;
-          });
-          return out;
-        };
-        M.sellGood.__coachWrapped = true;
-      }
+    function ledgerOf() {
+      var m = game.mods && game.mods['suivi des ordres'];
+      return m && m.ledger && typeof m.ledger.position === 'function' ? m.ledger : null;
     }
     function marketSnapshot() {
       var M = marketOf();
       if (!M) return null;
+      var ledger = ledgerOf();
       return M.goodsById.filter(function (g) { return g.active && !g.hidden; }).map(function (g) {
-        var rest = M.getRestingVal(g.id), c = costs[g.id];
+        var rest = M.getRestingVal(g.id);
+        var pos = ledger ? ledger.position(g.id, g.val) : null;
         return {
           id: g.id, name: g.name, symbol: g.symbol, val: g.val, rest: rest,
           pct: Math.round(g.val / rest * 1e4) / 1e4, stock: g.stock, max: M.getGoodMaxStock(g),
           mode: MARKET_MODES[g.mode] || String(g.mode),
-          avg: c && !c.unknown && c.qty === g.stock && c.qty > 0 ? c.total / c.qty : null,
+          avg: pos && pos.qtyKnown > 0 ? pos.pru : null,
+          unknown: pos ? pos.qtyUnknown : 0,
+          realized: pos ? pos.realized : 0,
         };
       });
     }
@@ -687,7 +657,6 @@
     function tick() {
       safe(function () {
         wrapGrimoire(); // idempotent; re-wraps spells rebuilt by a hard reset
-        wrapMarket();
         var snap = snapshot();
         currentFates();
         if (ui) { ui.log.onTick(snap); refreshPanel(); }

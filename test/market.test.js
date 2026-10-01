@@ -34,53 +34,41 @@ test('live feed lists active goods with price, resting value, stock and trend', 
   const rec = install(G, (n, c) => writes.push([n, c]), new ComboTracker(), new LiveFeed());
   rec.tick();
   assert.deepStrictEqual(lastLive(writes).market, [
-    { id: 0, name: 'Céréales', symbol: 'CRL', val: 6.4, rest: 10, pct: 0.64, stock: 0, max: 100, mode: 'stable', avg: null },
-    { id: 1, name: 'Chocolat', symbol: 'CHC', val: 14.55, rest: 20, pct: 0.7275, stock: 0, max: 100, mode: 'slow rise', avg: null },
+    { id: 0, name: 'Céréales', symbol: 'CRL', val: 6.4, rest: 10, pct: 0.64, stock: 0, max: 100, mode: 'stable', avg: null, unknown: 0, realized: 0 },
+    { id: 1, name: 'Chocolat', symbol: 'CHC', val: 14.55, rest: 20, pct: 0.7275, stock: 0, max: 100, mode: 'slow rise', avg: null, unknown: 0, realized: 0 },
   ]);
 });
 
-test('average buy price includes the 20% overhead and is weighted across buys', () => {
+test('average buy price comes from the Suivi des ordres ledger when present', () => {
   const G = fakeGame();
   const M = fakeMarket(G);
+  M.goodsById[0].stock = 20;
+  G.mods = { 'suivi des ordres': { ledger: {
+    position(id, val) {
+      if (id !== 0) return { qtyKnown: 0, qtyUnknown: 0, pru: 0, unrealized: 0, realized: 0 };
+      return { qtyKnown: 15, qtyUnknown: 5, pru: 6.84, unrealized: 15 * (val - 6.84), realized: 12 };
+    },
+  } } };
   const writes = [];
   const rec = install(G, (n, c) => writes.push([n, c]), new ComboTracker(), new LiveFeed());
-  rec.tick(); // wraps the market
-  M.buyGood(0, 10);           // 10 at 6.4 * 1.2 = 7.68
-  M.goodsById[0].val = 5;
-  M.buyGood(0, 10);           // 10 at 5 * 1.2 = 6.0
   rec.tick();
   const crl = lastLive(writes).market[0];
-  assert.strictEqual(crl.stock, 20);
-  assert.ok(Math.abs(crl.avg - 6.84) < 1e-9, String(crl.avg));
+  assert.ok(Math.abs(crl.avg - 6.84) < 1e-9);
+  assert.strictEqual(crl.unknown, 5);
+  assert.ok(Math.abs(crl.realized - 12) < 1e-9);
 });
 
-test('brokers lower the overhead used for the average', () => {
-  const G = fakeGame();
-  const M = fakeMarket(G);
-  M.brokers = 2;
-  const writes = [];
-  const rec = install(G, (n, c) => writes.push([n, c]), new ComboTracker(), new LiveFeed());
-  rec.tick();
-  M.buyGood(0, 1);
-  rec.tick();
-  const expected = 6.4 * (1 + 0.01 * 20 * Math.pow(0.95, 2));
-  assert.ok(Math.abs(lastLive(writes).market[0].avg - expected) < 1e-9);
-});
-
-test('selling keeps the average; selling everything clears it', () => {
+test('without the ledger mod, avg is null and nothing breaks', () => {
   const G = fakeGame();
   const M = fakeMarket(G);
   const writes = [];
   const rec = install(G, (n, c) => writes.push([n, c]), new ComboTracker(), new LiveFeed());
   rec.tick();
   M.buyGood(0, 10);
-  M.goodsById[0].val = 12;
-  M.sellGood(0, 4);
   rec.tick();
-  assert.ok(Math.abs(lastLive(writes).market[0].avg - 7.68) < 1e-9);
-  M.sellGood(0, 6);
-  rec.tick();
-  assert.strictEqual(lastLive(writes).market[0].avg, null);
+  const crl = lastLive(writes).market[0];
+  assert.strictEqual(crl.avg, null);
+  assert.strictEqual(crl.stock, 10);
 });
 
 test('a failed buy (returns false) does not change the average', () => {
