@@ -19,7 +19,7 @@ test('french text, highlight and combo label', () => {
 test('golden without buff shows cookies earned; failed spell is red', () => {
   const acts = [g(0, [], 7.7e9), { kind: 'spell', t: 1, spell: 'stretch time', ok: false }];
   const html = renderPanel(acts, [], 2);
-  assert.match(html, /\+7,7 G cookies/);
+  assert.match(html, /\+7,7 B cookies/);
   assert.match(html, /ccc-fail/);
   assert.match(html, /Dilatation temporelle <span class="ccc-ko">RATÉ<\/span>/);
 });
@@ -72,4 +72,10 @@ test('each row starts with a game icon from img/icons.png', () => {
   assert.match(html, /background-position:-368px -176px/);  // spell [23,11]
   assert.match(html, /background-position:-0px -0px/);      // cursor [0,0] for clicks
   assert.strictEqual((html.match(/ccc-ico/g) || []).length, 4, 'custom icon sheet falls back to no icon');
+});
+
+test('numbers use the game short scale (B, T, Qa) like Cookie Monster', () => {
+  const html = renderPanel([g(0, [], 2.5e12), g(1, [], 3e15)], [], 2);
+  assert.match(html, /\+2,5 T cookies/);
+  assert.match(html, /\+3,0 Qa cookies/);
 });

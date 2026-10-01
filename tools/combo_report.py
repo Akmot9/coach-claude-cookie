@@ -27,7 +27,7 @@ SPELL_FR = {
     "resurrect abomination": "Résurrection abominable",
     "diminish ineptitude": "Réduire l'inaptitude",
 }
-UNITS = [(1e18, "Qi"), (1e15, "P"), (1e12, "T"), (1e9, "G"), (1e6, "M"), (1e3, "k")]
+UNITS = [(1e18, "Qi"), (1e15, "Qa"), (1e12, "T"), (1e9, "B"), (1e6, "M"), (1e3, "k")]  # short scale, as shown by Cookie Monster
 
 
 def fmt(n):

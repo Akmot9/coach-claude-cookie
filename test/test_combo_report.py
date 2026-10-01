@@ -17,12 +17,12 @@ class ReportTest(unittest.TestCase):
 
     def test_fmt(self):
         self.assertEqual(cr.fmt(950), "950")
-        self.assertEqual(cr.fmt(7_700_000_000), "7,7 G")
+        self.assertEqual(cr.fmt(7_700_000_000), "7,7 B")
         self.assertEqual(cr.fmt(12_300_000), "12,3 M")
 
     def test_report_in_french(self):
         out = cr.report_combo(self.item)
-        self.assertIn("+7,7 G", out)
+        self.assertIn("+7,7 B", out)
         self.assertIn("30 s", out)
         self.assertIn("Frénésie de clics", out)
         self.assertIn("Invoquer des pâtisseries", out)
@@ -33,7 +33,7 @@ class ReportTest(unittest.TestCase):
         self.assertIn("5,0 clics/s", adv)            # 65 clicks over 13 s
 
     def test_table(self):
-        self.assertIn("+7,7 G", cr.table(self.state["history"]))
+        self.assertIn("+7,7 B", cr.table(self.state["history"]))
 
     def test_missing_and_invalid_file(self):
         self.assertIsInstance(cr.load("/nonexistent/x.txt"), str)
