@@ -235,7 +235,8 @@
     { name: 'DOUBLE BONUS', first: gives('Frenzy'), second: gives('Click frenzy'), window: buffWindow('Frenzy', 77) },
     { name: 'PROLONGATION', first: gives('Click frenzy'), second: spellOk('stretch time'), window: buffWindow('Click frenzy', 13) },
     { name: 'MAIN DU DESTIN', first: spellOk('hand of fate'), second: isGolden, window: fixedWindow(30) },
-    { name: 'INVOCATION BOOSTÉE', first: gives('Frenzy'), second: spellOk('conjure baked goods'), window: buffWindow('Frenzy', 77) },
+    // repeat: every conjure cast during the frenzy joins the same group
+    { name: 'INVOCATION BOOSTÉE', first: gives('Frenzy'), second: spellOk('conjure baked goods'), window: buffWindow('Frenzy', 77), repeat: true },
   ];
 
   // Actions that may sit between two combo steps without breaking them:
@@ -243,7 +244,7 @@
   // and buff lines other than the combo buffs themselves (e.g. Godzamok's Devastation).
   function isLink(a) {
     if (a.kind === 'clicks') return true;
-    if (a.kind === 'spell') return a.spell === 'hand of fate' && a.ok;
+    if (a.kind === 'spell') return a.ok && (a.spell === 'hand of fate' || a.spell === 'conjure baked goods');
     if (a.kind === 'buff') return a.name !== 'Frenzy' && a.name !== 'Click frenzy';
     return false;
   }
@@ -254,16 +255,20 @@
       for (var r = 0; r < COMBO_RULES.length; r++) {
         var rule = COMBO_RULES[r];
         if (!rule.first(actions[i])) continue;
-        var limit = rule.window(actions[i]);
+        var limit = rule.window(actions[i]), last = -1;
         for (var j = i + 1; j < actions.length; j++) {
           if (actions[j].t - actions[i].t > limit) break;
           if (rule.second(actions[j])) {
-            var idx = [];
-            for (var k = i; k <= j; k++) idx.push(k);
-            found.push({ name: rule.name, indices: idx });
-            break;
+            last = j;
+            if (!rule.repeat) break;
+            continue;
           }
           if (!isLink(actions[j])) break;
+        }
+        if (last !== -1) {
+          var idx = [];
+          for (var k = i; k <= last; k++) idx.push(k);
+          found.push({ name: rule.name, indices: idx });
         }
       }
     }

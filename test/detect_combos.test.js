@@ -67,3 +67,21 @@ test('window uses the real buff duration when known', () => {
   const f = { kind: 'golden', t: 0, wrath: false, earned: 0, buffs: ['Frenzy'], durations: { Frenzy: 154 } };
   assert.deepStrictEqual(detectCombos([f, g(100, ['Click frenzy'])]), [{ name: 'DOUBLE BONUS', indices: [0, 1] }]);
 });
+
+test('several conjures during the same frenzy are all boosted, in one group', () => {
+  assert.deepStrictEqual(
+    detectCombos([g(0, ['Frenzy']), sp(10, 'conjure baked goods'), cl(12), sp(15, 'conjure baked goods')]),
+    [{ name: 'INVOCATION BOOSTÉE', indices: [0, 1, 2, 3] }]);
+});
+
+test('a conjure after the frenzy window is not boosted', () => {
+  assert.deepStrictEqual(
+    detectCombos([g(0, ['Frenzy']), sp(10, 'conjure baked goods'), sp(90, 'conjure baked goods')]),
+    [{ name: 'INVOCATION BOOSTÉE', indices: [0, 1] }]);
+});
+
+test('a successful conjure does not break a double bonus', () => {
+  assert.deepStrictEqual(
+    detectCombos([g(0, ['Frenzy']), sp(3, 'conjure baked goods'), g(8, ['Click frenzy'])]),
+    [{ name: 'DOUBLE BONUS', indices: [0, 1, 2] }, { name: 'INVOCATION BOOSTÉE', indices: [0, 1] }]);
+});
