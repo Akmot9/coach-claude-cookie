@@ -29,8 +29,11 @@ class ReportTest(unittest.TestCase):
 
     def test_advice_stretch_time_and_click_speed(self):
         adv = " ".join(cr.advice(self.item))
-        self.assertIn("Dilatation temporelle", adv)  # 19 mana >= 8+0.2*19, not cast
+        # 19 mana − Conjure (9,6) = 9,4 < Stretch Time (11,8): no advice to cast it
+        self.assertNotIn("Dilatation temporelle", adv)
         self.assertIn("5,0 clics/s", adv)            # 65 clicks over 13 s
+        rich = {"summary": dict(self.item["summary"], magicStart=31, magicMax=31, spells=[]), "events": [], "ticks": []}
+        self.assertIn("Dilatation temporelle", " ".join(cr.advice(rich)))
 
     def test_table(self):
         self.assertIn("+7,7 B", cr.table(self.state["history"]))
