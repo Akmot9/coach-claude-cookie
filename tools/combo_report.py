@@ -63,7 +63,10 @@ def advice(item):
     cast = {sp["spell"] for sp in s["spells"]}
     mmax = s.get("magicMax")
     if "Click frenzy" in names and "stretch time" not in cast and mmax:
-        if s["magicStart"] >= 8 + 0.2 * mmax:
+        # mana left after the spells cast during the combo (Hand of Fate usually empties the bar)
+        COST = {"hand of fate": 10 + 0.6 * mmax, "conjure baked goods": 2 + 0.4 * mmax, "stretch time": 8 + 0.2 * mmax}
+        left = s["magicStart"] - sum(COST.get(sp["spell"], 0) for sp in s["spells"])
+        if left >= 8 + 0.2 * mmax:
             out.append("Tu avais le mana pour Dilatation temporelle : lance-la dès la Frénésie de clics pour la prolonger.")
     cf = [k for k in ticks if any(b["name"] == "Click frenzy" for b in k["buffs"])]
     if len(cf) >= 2 and cf[-1]["t"] > cf[0]["t"]:

@@ -60,5 +60,16 @@ class RobustLoadTest(unittest.TestCase):
         self.assertIsInstance(cr.load(tempfile.gettempdir()), str)
 
 
+class AdviceAfterFate(unittest.TestCase):
+    def test_no_stretch_time_advice_when_hand_of_fate_emptied_the_mana(self):
+        item = {"summary": {"start": 0, "end": 20, "duration": 20, "earned": 1, "handmade": 1, "clicks": 10,
+                            "bestCpsMult": 7, "bestClickMult": 777, "golden": 2,
+                            "buffs": [{"name": "Frenzy", "duration": 77, "multCpS": 7, "multClick": 1},
+                                      {"name": "Click frenzy", "duration": 13, "multCpS": 1, "multClick": 777}],
+                            "spells": [{"spell": "hand of fate", "ok": True}], "magicStart": 31, "magicMax": 31},
+                "events": [], "ticks": []}
+        self.assertNotIn("Dilatation temporelle", " ".join(cr.advice(item)))
+
+
 if __name__ == "__main__":
     unittest.main()
