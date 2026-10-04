@@ -90,3 +90,24 @@ test('install predicts from the grimoire, caches until the cast count changes', 
   rec.tick();
   assert.ok(seeds > after, 'recomputed after a cast');
 });
+
+test('fdSafe flags numbers where Gambler\'s Fever Dream second spell will succeed (next roll < 0.5)', () => {
+  const f = predictFates(gameMath(), Object.assign({}, BASE, { start: 49, count: 4 }));
+  // rolls: 49→?, 50→0.69, 51→0.11, 52→0.97
+  assert.strictEqual(f[0].fdSafe, false, 'n°49: next roll 0.69 ≥ 0.5');
+  assert.strictEqual(f[1].fdSafe, true, 'n°50: next roll 0.11 < 0.5');
+  assert.strictEqual(f[2].fdSafe, false, 'n°51: next roll 0.97');
+  assert.strictEqual(f[3].fdSafe, null, 'last one has no known successor');
+});
+
+test('panel marks fever-dream-safe numbers with RF', () => {
+  const fates = [
+    { n: 50, ok: true, result: 'frenzy', fdSafe: true },
+    { n: 51, ok: true, result: 'multiply cookies', fdSafe: false },
+    { n: 52, ok: false, result: 'blab', fdSafe: false },
+  ];
+  const html = renderPanel([], [], 0, fates);
+  assert.match(html, /50 : Frénésie <span class="ccc-rf">RF<\/span>/);
+  assert.doesNotMatch(html, /51 : Quelle chance <span class="ccc-rf"/);
+  assert.strictEqual((html.match(/ccc-rf/g) || []).length, 1);
+});

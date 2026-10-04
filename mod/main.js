@@ -390,6 +390,9 @@
       out.push({ n: n, ok: ok, result: choices[Math.floor(rng.random() * choices.length)], roll: roll });
     }
     rng.seedrandom(); // back to an unseeded stream, as castSpell does
+    // Gambler's Fever Dream never fails itself but its second spell uses the NEXT number's roll
+    // with a 50% backfire floor: safe only when that roll is below 0.5.
+    for (var i = 0; i < out.length; i++) out[i].fdSafe = i + 1 < out.length ? out[i + 1].roll < 0.5 : null;
     return out;
   }
 
@@ -405,11 +408,12 @@
   function renderFates(fates) {
     var items = fates.slice(0, FATE_SHOWN).map(function (f) {
       var label = esc(FATE_FR[f.result] || f.result);
-      if (!f.ok) return f.n + ' : <span class="ccc-ko">' + TEXT_FR.ko + ' (' + label + ')</span>';
-      if (FATE_GOOD[f.result]) return '<span class="ccc-good">' + f.n + ' : ' + label + '</span>';
-      return f.n + ' : ' + label;
+      var rf = f.fdSafe ? ' <span class="ccc-rf">RF</span>' : '';
+      if (!f.ok) return f.n + ' : <span class="ccc-ko">' + TEXT_FR.ko + ' (' + label + ')</span>' + rf;
+      if (FATE_GOOD[f.result]) return '<span class="ccc-good">' + f.n + ' : ' + label + '</span>' + rf;
+      return f.n + ' : ' + label + rf;
     });
-    return '<div class="ccc-fate">Destin : ' + items.join(' · ') + '</div>';
+    return '<div class="ccc-fate">Destin : ' + items.join(' · ') + ' <span class="ccc-time">(RF = Rêve fébrile sûr)</span></div>';
   }
 
   var PANEL_ID = 'coachComboPanel';
@@ -422,6 +426,7 @@
     '#coachComboPanel .ccc-ok{color:#6bff8f;font-weight:bold}' +
     '#coachComboPanel .ccc-fate{margin-bottom:3px;white-space:normal}' +
     '#coachComboPanel .ccc-good{color:gold;font-weight:bold}' +
+    '#coachComboPanel .ccc-rf{font-size:9px;padding:0 3px;border:1px solid #6bff8f;border-radius:3px;color:#6bff8f}' +
     '#coachComboPanel .ccc-ko{color:#ff6b6b;font-weight:bold}' +
     '#coachComboPanel .ccc-ico{display:inline-block;width:16px;height:16px;vertical-align:middle;margin-right:3px;' +
     'background-image:url(img/icons.png);background-repeat:no-repeat;background-size:576px 592px}' +
