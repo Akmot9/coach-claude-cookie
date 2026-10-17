@@ -79,3 +79,8 @@ test('numbers use the game short scale (B, T, Qa) like Cookie Monster', () => {
   assert.match(html, /\+2,5 T cookies/);
   assert.match(html, /\+3,0 Qa cookies/);
 });
+
+test('a building sale row shows the count and the french building name', () => {
+  const html = renderPanel([{ kind: 'sell', t: 0, tEnd: 0, name: 'Wizard tower', dname: 'Tour de sorciers', count: 95, icon: [17, 0] }], [], 1);
+  assert.match(html, /Vente : 95 × Tour de sorciers/);
+});

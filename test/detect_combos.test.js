@@ -85,3 +85,25 @@ test('a successful conjure does not break a double bonus', () => {
     detectCombos([g(0, ['Frenzy']), sp(3, 'conjure baked goods'), g(8, ['Click frenzy'])]),
     [{ name: 'DOUBLE BONUS', indices: [0, 1, 2] }, { name: 'INVOCATION BOOSTÉE', indices: [0, 1] }]);
 });
+
+const sell = (t, count = 100, name = 'Farm') => ({ kind: 'sell', t, tEnd: t, name, count });
+
+test('double cast: two Hand of Fate within 10 s, with golden clicks and sales between', () => {
+  const found = detectCombos([sp(0, 'hand of fate'), g(1, ['Frenzy']), sell(2, 95, 'Wizard tower'), sp(3, 'hand of fate')]);
+  assert.deepStrictEqual(found.filter(c => c.name === 'DOUBLE SORT'), [{ name: 'DOUBLE SORT', indices: [0, 1, 2, 3] }]);
+});
+
+test('double cast too slow is not a combo', () => {
+  const found = detectCombos([sp(0, 'hand of fate'), sp(11, 'hand of fate')]);
+  assert.deepStrictEqual(found.filter(c => c.name === 'DOUBLE SORT'), []);
+});
+
+test('godzamok: sales during a click frenzy', () => {
+  const found = detectCombos([g(0, ['Click frenzy']), cl(1), sell(2), sell(3, 50, 'Mine')]);
+  assert.deepStrictEqual(found.filter(c => c.name === 'GODZAMOK'), [{ name: 'GODZAMOK', indices: [0, 1, 2, 3] }]);
+});
+
+test('a sale does not break a double bonus', () => {
+  assert.deepStrictEqual(detectCombos([g(0, ['Frenzy']), sell(1), g(10, ['Click frenzy'])]).filter(c => c.name === 'DOUBLE BONUS'),
+    [{ name: 'DOUBLE BONUS', indices: [0, 1, 2] }]);
+});

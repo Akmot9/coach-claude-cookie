@@ -96,3 +96,35 @@ test('buff and spell icons are kept on actions', () => {
   a.onEvent({ type: 'spell', t: 2, spell: 'stretch time', ok: true, icon: [23, 11] });
   assert.deepStrictEqual(a.actions().map(x => x.icon), [[15, 5], [23, 11]]);
 });
+
+test('building sales become actions, grouped per building within a burst', () => {
+  const a = new ActionLog();
+  a.onEvent({ type: 'sell', t: 1, name: 'Wizard tower', dname: 'Tour de sorciers', count: 50, icon: [17, 0] });
+  a.onEvent({ type: 'sell', t: 1.5, name: 'Wizard tower', dname: 'Tour de sorciers', count: 45, icon: [17, 0] });
+  a.onEvent({ type: 'sell', t: 2, name: 'Farm', dname: 'Ferme', count: 100, icon: [2, 0] });
+  a.onEvent({ type: 'sell', t: 9, name: 'Farm', dname: 'Ferme', count: 10, icon: [2, 0] });
+  assert.deepStrictEqual(a.actions(), [
+    { kind: 'sell', t: 1, tEnd: 1.5, name: 'Wizard tower', dname: 'Tour de sorciers', count: 95, icon: [17, 0] },
+    { kind: 'sell', t: 2, tEnd: 2, name: 'Farm', dname: 'Ferme', count: 100, icon: [2, 0] },
+    { kind: 'sell', t: 9, tEnd: 9, name: 'Farm', dname: 'Ferme', count: 10, icon: [2, 0] },
+  ]);
+});
+
+test('recorder emits one sell event per sell call with the amount actually sold', () => {
+  const tower = { name: 'Wizard tower', dname: 'Tour de sorciers', amount: 100, iconColumn: 17, sell(n) { this.amount -= Math.min(n, this.amount); } };
+  const G = {
+    fps: 30, cookies: 0, cookiesEarned: 0, handmadeCookies: 0, cookieClicks: 0, cookiesPs: 0, buffs: {},
+    gainBuff(n) { return { name: n, time: 30, maxTime: 30 }; },
+    shimmerTypes: { golden: { popFunc() {} } },
+    Objects: { 'Wizard tower': tower }, ObjectsById: [tower],
+  };
+  const tr = new ComboTracker();
+  const events = [];
+  tr.onEvent = e => events.push(e);
+  install(G, () => {}, tr);
+  tower.sell(95);
+  tower.sell(10);
+  tower.sell(10); // nothing left to sell
+  assert.deepStrictEqual(events.filter(e => e.type === 'sell').map(e => [e.name, e.dname, e.count, e.icon]),
+    [['Wizard tower', 'Tour de sorciers', 95, [17, 0]], ['Wizard tower', 'Tour de sorciers', 5, [17, 0]]]);
+});

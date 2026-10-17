@@ -166,7 +166,7 @@
     return {
       version: 1, t: s.t, cookies: s.cookies, cookiesEarned: s.cookiesEarned, cps: s.cps,
       handmade: s.handmade, clicks: s.clicks, buffs: s.buffs, magic: s.magic, magicMax: s.magicMax,
-      lumps: s.lumps, buildings: s.buildings, pantheon: s.pantheon || null, fates: s.fates || null, market: s.market || null, events: this.events,
+      lumps: s.lumps, buildings: s.buildings, pantheon: s.pantheon || null, fates: s.fates || null, doubleCast: s.doubleCast || null, market: s.market || null, events: this.events,
     };
   };
 
@@ -195,6 +195,15 @@
     } else if (e.type === 'buff' && e.fromGolden) this.pendingDurations[e.name] = e.duration;
     else if (e.type === 'buff') this._push({ kind: 'buff', t: e.t, name: e.name, duration: e.duration, icon: e.icon });
     else if (e.type === 'spell') this._push({ kind: 'spell', t: e.t, spell: e.spell, ok: e.ok, icon: e.icon });
+    else if (e.type === 'sell') {
+      var last = this.list[this.list.length - 1];
+      if (last && last.kind === 'sell' && last.name === e.name && e.t - last.tEnd <= BURST_GAP) {
+        last.count += e.count;
+        last.tEnd = e.t;
+      } else {
+        this._push({ kind: 'sell', t: e.t, tEnd: e.t, name: e.name, dname: e.dname, count: e.count, icon: e.icon });
+      }
+    }
   };
 
   ActionLog.prototype.onTick = function (s) {
@@ -220,6 +229,7 @@
   }
   function spellOk(key) { return function (a) { return a.kind === 'spell' && a.spell === key && a.ok; }; }
   function isGolden(a) { return a.kind === 'golden'; }
+  function isSell(a) { return a.kind === 'sell'; }
 
   // Seconds the first step's buff lasts: the real duration when known (effect-duration upgrades), else the base one.
   function buffWindow(name, base) {
@@ -237,13 +247,18 @@
     { name: 'MAIN DU DESTIN', first: spellOk('hand of fate'), second: isGolden, window: fixedWindow(30) },
     // repeat: every conjure cast during the frenzy joins the same group
     { name: 'INVOCATION BOOSTÉE', first: gives('Frenzy'), second: spellOk('conjure baked goods'), window: buffWindow('Frenzy', 77), repeat: true },
+    // second Hand of Fate after selling Wizard towers to lower the max mana (and the spell cost)
+    { name: 'DOUBLE SORT', first: spellOk('hand of fate'), second: spellOk('hand of fate'), window: fixedWindow(10),
+      link: function (a) { return isLink(a) || isGolden(a); } },
+    // every sale during the click frenzy joins the group (Godzamok's Devastation)
+    { name: 'GODZAMOK', first: gives('Click frenzy'), second: isSell, window: buffWindow('Click frenzy', 13), repeat: true },
   ];
 
   // Actions that may sit between two combo steps without breaking them:
-  // click bursts, a successful Hand of Fate (it sets up the next golden cookie),
+  // click bursts, building sales, a successful Hand of Fate (it sets up the next golden cookie),
   // and buff lines other than the combo buffs themselves (e.g. Godzamok's Devastation).
   function isLink(a) {
-    if (a.kind === 'clicks') return true;
+    if (a.kind === 'clicks' || a.kind === 'sell') return true;
     if (a.kind === 'spell') return a.ok && (a.spell === 'hand of fate' || a.spell === 'conjure baked goods');
     if (a.kind === 'buff') return a.name !== 'Frenzy' && a.name !== 'Click frenzy';
     return false;
@@ -255,7 +270,7 @@
       for (var r = 0; r < COMBO_RULES.length; r++) {
         var rule = COMBO_RULES[r];
         if (!rule.first(actions[i])) continue;
-        var limit = rule.window(actions[i]), last = -1;
+        var limit = rule.window(actions[i]), last = -1, link = rule.link || isLink;
         for (var j = i + 1; j < actions.length; j++) {
           if (actions[j].t - actions[i].t > limit) break;
           if (rule.second(actions[j])) {
@@ -263,7 +278,7 @@
             if (!rule.repeat) break;
             continue;
           }
-          if (!isLink(actions[j])) break;
+          if (!link(actions[j])) break;
         }
         if (last !== -1) {
           var idx = [];
@@ -290,7 +305,7 @@
       'diminish ineptitude': "Réduire l'inaptitude",
     },
     golden: 'doré', wrath: 'de la colère', clicks: 'clics', cookies: 'cookies', title: 'COMBOS', ok: 'OK', ko: 'RATÉ',
-    keys: 'Clic clavier : P / Espace',
+    keys: 'Clic clavier : P / Espace', sell: 'Vente',
   };
 
   function esc(s) {
@@ -336,10 +351,11 @@
     }
     if (a.kind === 'buff') return (T.buffs[a.name] || a.name) + ' ' + Math.round(a.duration) + ' s';
     if (a.kind === 'spell') return T.spells[a.spell] || a.spell;
+    if (a.kind === 'sell') return T.sell + ' : ' + a.count + ' \u00d7 ' + (a.dname || a.name);
     return '×' + a.count + ' ' + T.clicks;
   }
 
-  function renderPanel(actions, combos, now, fates) {
+  function renderPanel(actions, combos, now, fates, plan) {
     var hl = {}, label = {};
     combos.forEach(function (c) {
       c.indices.forEach(function (i) { hl[i] = true; });
@@ -358,7 +374,7 @@
       rows.push('<div class="' + cls + '">' + iconHtml(actionIcon(a)) + '<span class="ccc-time">' + hhmmss(a.t) + '</span> ' +
         esc(actionText(a)) + status + lab + '</div>');
     }
-    return '<div class="ccc-title">' + TEXT_FR.title + ' <span class="ccc-time">' + TEXT_FR.keys + '</span></div>' + (fates && fates.length ? renderFates(fates) : '') + rows.join('');
+    return '<div class="ccc-title">' + TEXT_FR.title + ' <span class="ccc-time">' + TEXT_FR.keys + '</span></div>' + (fates && fates.length ? renderFates(fates) : '') + renderDoubleCast(fates, plan) + rows.join('');
   }
 
   // Force the Hand of Fate outcomes are deterministic: castSpell seeds Math.random with
@@ -414,6 +430,61 @@
       return f.n + ' : ' + label + rf;
     });
     return '<div class="ccc-fate">Destin : ' + items.join(' · ') + ' <span class="ccc-time">(RF = Rêve fébrile sûr)</span></div>';
+  }
+
+  // Double Hand of Fate: cast at full mana, click the golden cookie (each one on screen adds 15% fail),
+  // sell Wizard towers so the max mana (and the spell cost) drops, cast again, then buy the towers back.
+  // Selling clamps the mana to the new max, so the second cast must fit both the mana left and the new max.
+  // Mirrors minigameGrimoire.js computeMagicM and getSpellCost for 'hand of fate' (10 + 60% of max).
+  function magicMax(towers, level) {
+    var t = Math.max(towers, 1), lvl = Math.max(level, 1);
+    return Math.floor(4 + Math.pow(t, 0.6) + Math.log((t + (lvl - 1) * 10) / 15 + 1) * 15);
+  }
+  function fateCost(max, costMult) { return Math.floor((10 + max * 0.6) * costMult); }
+
+  function planDoubleCast(o) {
+    var mult = typeof o.costMult === 'number' ? o.costMult : 1, level = o.level;
+    function fits(k, left) { var m = magicMax(k, level), c = fateCost(m, mult); return c <= Math.min(left, m); }
+    // cheapest second cast: the fewest towers that still give a max able to hold its own cost
+    var minCost = null;
+    for (var k = 1; k <= 5000 && minCost === null; k++) {
+      var m = magicMax(k, level);
+      if (fateCost(m, mult) <= m) minCost = fateCost(m, mult);
+    }
+    var max = magicMax(o.towers, level), cost = fateCost(max, mult);
+    if (max - cost < minCost) {
+      var need = max;
+      while (need - fateCost(need, mult) < minCost) need++;
+      return { status: 'max', max: max, needMax: need };
+    }
+    var left = o.magic - cost;
+    if (left < minCost) return { status: 'mana', max: max, needMagic: cost + minCost };
+    if (left >= cost) return { status: 'ok', keep: o.towers, sell: 0 };
+    for (var keep = o.towers - 1; keep >= 1; keep--) {
+      if (fits(keep, left)) return { status: 'ok', keep: keep, sell: o.towers - keep };
+    }
+    return { status: 'mana', max: max, needMagic: cost + minCost };
+  }
+
+  var DOUBLE_WORTH = { 'frenzy': true, 'click frenzy': true, 'building special': true };
+  // Only worth it when both next casts succeed, give buffs that stack, and one of them boosts clicks or a building.
+  function doubleCastPair(fates) {
+    if (!fates || fates.length < 2) return null;
+    var a = fates[0], b = fates[1];
+    if (!a.ok || !b.ok || !DOUBLE_WORTH[a.result] || !DOUBLE_WORTH[b.result]) return null;
+    if (!FATE_GOOD[a.result] && !FATE_GOOD[b.result]) return null;
+    return [a, b];
+  }
+
+  function renderDoubleCast(fates, plan) {
+    var pair = doubleCastPair(fates);
+    if (!pair || !plan) return '';
+    var head = 'Double sort ' + pair.map(function (f) { return f.n + ' ' + (FATE_FR[f.result] || f.result); }).join(' + ') + ' : ';
+    var body;
+    if (plan.status === 'max') body = 'il faut ' + plan.needMax + ' de mana max (tu as ' + plan.max + ')';
+    else if (plan.status === 'mana') body = 'attends ' + plan.needMagic + ' de mana';
+    else body = 'lance, clique le dor\u00e9, ' + (plan.sell ? 'vends ' + plan.sell + ' tours (garde ' + plan.keep + '), ' : '') + 'relance';
+    return '<div class="ccc-fate ' + (plan.status === 'ok' ? 'ccc-good' : '') + '">' + esc(head + body) + '</div>';
   }
 
   var PANEL_ID = 'coachComboPanel';
@@ -522,7 +593,7 @@
         var el = mountPanel(ui.doc);
         if (!el) return;
         var acts = ui.log.actions();
-        var html = renderPanel(acts, detectCombos(acts), now(), fates);
+        var html = renderPanel(acts, detectCombos(acts), now(), fates, plan);
         if (el.__coachHtml !== html) { el.innerHTML = html; el.__coachHtml = html; }
       } catch (e) {
         panelDisabled = true;
@@ -583,6 +654,38 @@
           spell[kind] = wrapped;
         });
       });
+    }
+
+    // Building sales (Godzamok, double Hand of Fate): one event per sell call with the amount actually sold.
+    function wrapSells() {
+      var objs = game.ObjectsById || [];
+      Object.keys(objs).forEach(function (k) {
+        var obj = objs[k], orig = obj && obj.sell;
+        if (typeof orig !== 'function' || orig.__coachWrapped) return;
+        var wrapped = function () {
+          var before = this.amount;
+          var out = orig.apply(this, arguments);
+          var self = this, sold = before - this.amount;
+          if (sold > 0) safe(function () {
+            emit({ type: 'sell', t: now(), name: self.name, dname: self.dname, count: sold,
+              icon: typeof self.iconColumn === 'number' ? [self.iconColumn, 0] : undefined });
+          });
+          return out;
+        };
+        wrapped.__coachWrapped = true;
+        obj.sell = wrapped;
+      });
+    }
+    wrapSells();
+
+    var plan = null;
+    function currentPlan() {
+      var tower = game.Objects && game.Objects['Wizard tower'];
+      var M = tower && tower.minigame;
+      if (!M || typeof M.magic !== 'number') return (plan = null);
+      var aura = typeof game.auraMult === 'function' ? game.auraMult('Supreme Intellect') : 0;
+      plan = planDoubleCast({ magic: M.magic, towers: tower.amount, level: tower.level, costMult: 1 - 0.1 * aura });
+      return plan;
     }
 
     function snapshot() {
@@ -655,6 +758,7 @@
       out.lumps = game.lumps;
       out.pantheon = pantheonSnapshot();
       out.fates = fates;
+      out.doubleCast = plan;
       out.market = marketSnapshot();
       return out;
     }
@@ -662,8 +766,10 @@
     function tick() {
       safe(function () {
         wrapGrimoire(); // idempotent; re-wraps spells rebuilt by a hard reset
+        wrapSells();
         var snap = snapshot();
         currentFates();
+        currentPlan();
         if (ui) { ui.log.onTick(snap); refreshPanel(); }
         if (live) {
           live.onTick(liveSnapshot(snap));
@@ -707,5 +813,5 @@
     });
   }
 
-  if (typeof module !== 'undefined' && module.exports) module.exports = { ComboTracker: ComboTracker, LiveFeed: LiveFeed, ActionLog: ActionLog, detectCombos: detectCombos, renderPanel: renderPanel, predictFates: predictFates, installKeyClicks: installKeyClicks, mountPanel: mountPanel, install: install };
+  if (typeof module !== 'undefined' && module.exports) module.exports = { planDoubleCast: planDoubleCast, magicMax: magicMax, ComboTracker: ComboTracker, LiveFeed: LiveFeed, ActionLog: ActionLog, detectCombos: detectCombos, renderPanel: renderPanel, predictFates: predictFates, installKeyClicks: installKeyClicks, mountPanel: mountPanel, install: install };
 })();
