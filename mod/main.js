@@ -157,6 +157,21 @@
           if (god !== before) self.onEvent({ type: 'pantheon', t: s.t, slot: i, god: god, prev: before, swaps: s.pantheon.swaps });
         });
       }
+      if (s.dragon && prev.dragon) {
+        if (s.dragon.level !== prev.dragon.level) self.onEvent({ type: 'dragon', t: s.t, level: s.dragon.level, prev: prev.dragon.level });
+        s.dragon.auras.forEach(function (aura, i) {
+          var before = prev.dragon.auras[i];
+          if (aura !== before) self.onEvent({ type: 'aura', t: s.t, slot: i, aura: aura, prev: before });
+        });
+      }
+      if (s.levels && prev.levels) {
+        Object.keys(s.levels).forEach(function (n) {
+          if (prev.levels[n] !== undefined && s.levels[n] !== prev.levels[n]) self.onEvent({ type: 'level', t: s.t, name: n, level: s.levels[n] });
+        });
+      }
+      if (s.garden && prev.garden && s.garden.seeds !== prev.garden.seeds) {
+        self.onEvent({ type: 'seed', t: s.t, seeds: s.garden.seeds, total: s.garden.seedsTotal });
+      }
     }
     this.last = s;
   };
@@ -166,7 +181,8 @@
     return {
       version: 1, t: s.t, cookies: s.cookies, cookiesEarned: s.cookiesEarned, cps: s.cps,
       handmade: s.handmade, clicks: s.clicks, buffs: s.buffs, magic: s.magic, magicMax: s.magicMax,
-      lumps: s.lumps, buildings: s.buildings, pantheon: s.pantheon || null, fates: s.fates || null, doubleCast: s.doubleCast || null, market: s.market || null, events: this.events,
+      lumps: s.lumps, buildings: s.buildings, pantheon: s.pantheon || null, ascension: s.ascension || null, dragon: s.dragon || null, levels: s.levels || null,
+      lump: s.lump || null, golden: s.golden || null, garden: s.garden || null, season: s.season || null, fates: s.fates || null, doubleCast: s.doubleCast || null, market: s.market || null, events: this.events,
     };
   };
 
@@ -715,6 +731,53 @@
       return { slots: slots, swaps: M.swaps };
     }
 
+    // Long-term progress: what a coach needs to plan ascensions and the big combos
+    function ascensionSnapshot() {
+      if (game.prestige === undefined) return null;
+      return { prestige: game.prestige, chips: game.heavenlyChips, resets: game.resets, cookiesReset: game.cookiesReset };
+    }
+    function dragonSnapshot() {
+      if (game.dragonLevel === undefined) return null;
+      var auras = [game.dragonAura, game.dragonAura2].map(function (id) {
+        var a = game.dragonAuras && game.dragonAuras[id];
+        return a && id > 0 ? a.name : null;
+      });
+      return { level: game.dragonLevel, maxLevel: game.dragonLevels ? game.dragonLevels.length - 1 : null, auras: auras };
+    }
+    function levelsSnapshot() {
+      var out = {}, objs = game.ObjectsById || {};
+      Object.keys(objs).forEach(function (k) { out[objs[k].name] = objs[k].level || 0; });
+      return out;
+    }
+    // times in seconds, like every other t in the feed
+    function lumpSnapshot() {
+      if (game.lumpT === undefined || !game.lumpRipeAge) return null;
+      return { matureAt: (game.lumpT + game.lumpMatureAge) / 1000, ripeAt: (game.lumpT + game.lumpRipeAge) / 1000, type: game.lumpCurrentType || 0 };
+    }
+    // Farm minigame: plot[y][x] = [plant id + 1, age]; 0 = empty tile
+    function gardenSnapshot() {
+      var M = game.Objects && game.Objects.Farm && game.Objects.Farm.minigame;
+      if (!M || !M.plot || !M.plantsById) return null;
+      var plants = {}, tiles = 0, empty = 0, seeds = 0;
+      M.plantsById.forEach(function (p) { if (p.unlocked) seeds++; });
+      for (var y = 0; y < M.plot.length; y++) {
+        for (var x = 0; x < M.plot[y].length; x++) {
+          if (M.isTileUnlocked && !M.isTileUnlocked(x, y)) continue;
+          tiles++;
+          var tile = M.plot[y][x], p = tile && tile[0] > 0 ? M.plantsById[tile[0] - 1] : null;
+          if (!p) { empty++; continue; }
+          var e = plants[p.name] || (plants[p.name] = { count: 0, mature: 0 });
+          e.count++;
+          if (tile[1] >= p.mature) e.mature++;
+        }
+      }
+      var soil = M.soilsById && M.soilsById[M.soil];
+      return {
+        tiles: tiles, empty: empty, plants: plants, seeds: seeds, seedsTotal: M.plantsById.length,
+        soil: soil ? soil.name : null, frozen: !!M.freeze, nextTick: M.nextStep ? M.nextStep / 1000 : null,
+      };
+    }
+
     // Stock market (Bank minigame). Cost basis comes from the "Suivi des ordres" mod's ledger when it is
     // installed (Game.mods['suivi des ordres'].ledger); this mod keeps no purchase history of its own.
     var MARKET_MODES = ['stable', 'slow rise', 'slow fall', 'fast rise', 'fast fall', 'chaotic'];
@@ -757,6 +820,13 @@
       out.upgrades = upgrades;
       out.lumps = game.lumps;
       out.pantheon = pantheonSnapshot();
+      out.ascension = ascensionSnapshot();
+      out.dragon = dragonSnapshot();
+      out.levels = levelsSnapshot();
+      out.lump = lumpSnapshot();
+      out.golden = game.goldenClicks === undefined ? null : { clicked: game.goldenClicks, missed: game.missedGoldenClicks };
+      out.garden = gardenSnapshot();
+      out.season = game.season || null;
       out.fates = fates;
       out.doubleCast = plan;
       out.market = marketSnapshot();
